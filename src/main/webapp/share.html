@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>分享 - 预览</title>
+  <style>
+    :root{--primary:#2196F3;--accent:#4CAF50;--danger:#f44336;--muted:#777}
+    body { font-family: Arial, Helvetica, sans-serif; margin: 16px; background:#fff; color:#222 }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 20px }
+    .meta { color:var(--muted); margin-bottom:12px }
+    .card { border:1px solid #eee; padding:12px; border-radius:6px; display:flex; align-items:center }
+    .controls { margin-top:12px }
+    .btn { display:inline-block; padding:8px 12px; border-radius:4px; background:var(--primary); color:white; text-decoration:none; border:none; cursor:pointer }
+    .btn.secondary { background:#eee; color:#333 }
+    .btn.small { padding:6px 10px; font-size:14px }
+    .muted { color:#999 }
+    /* 横向排列单选/复选组 */
+    .radios { display:flex; gap:12px; align-items:center }
+    .file-info { margin-left:12px }
+    .file-meta { color:#777; font-size:13px; margin-top:6px }
+    input[type="checkbox"], input[type="radio"] { transform:scale(1.1); margin-right:6px }
+    .not-found { padding:20px; border:1px dashed #f0f0f0; border-radius:6px; text-align:center }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="title">分享预览</h1>
+    <div class="meta" id="meta"></div>
+    <div class="card" id="card">正在加载分享信息...</div>
+    <div class="controls" id="controls"></div>
+  </div>
+
+  <script>
+    function getTypeLabel(item) {
+      if (!item) return '文件';
+      if (item.type && item.type === 'directory') return '目录';
+      const name = (item.name || item.path || '').toLowerCase();
+      const ext = name.includes('.') ? name.split('.').pop() : '';
+      const images = ['jpg','jpeg','png','gif','bmp','svg','webp'];
+      const videos = ['mp4','mov','avi','mkv','webm'];
+      const docs = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','md','csv','odt'];
+      const archives = ['zip','rar','7z','tar','gz','bz2'];
+      if (images.includes(ext)) return '图片';
+      if (videos.includes(ext)) return '视频';
+      if (docs.includes(ext)) return '文档';
+      if (archives.includes(ext)) return '压缩包';
+      return '文件';
+    }
+
+    (async function(){
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      const card = document.getElementById('card');
+      const controls = document.getElementById('controls');
+      if (!id) { card.innerHTML = '<div class="not-found">缺少分享 id。<div style="margin-top:8px;"><a class="btn secondary" href="/">返回首页</a></div></div>'; return; }
+
+      try {
+        const ctx = window.location.pathname.replace(/\/[^/]*$/, '') || '';
+        const base = window.location.origin + ctx;
+        const resp = await fetch(`${base}/api/share/public?id=${encodeURIComponent(id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!resp.ok) {
+          if (resp.status === 404) {
+            card.innerHTML = `<div class="not-found"><strong>分享不存在或已过期</strong><div style="margin-top:10px; color:var(--muted)">该分享可能已被删除或超过有效期。</div><div style="margin-top:12px"><a class="btn small" href="/">返回首页</a></div></div>`;
+            controls.innerHTML = '';
+            return;
+          }
+          const txt = await resp.text();
+          card.innerHTML = `<div class="not-found"><strong>加载失败</strong><div style="margin-top:8px; color:var(--muted)">服务器返回 ${resp.status}</div><pre style="text-align:left; white-space:pre-wrap; max-height:200px; overflow:auto; background:#fafafa; padding:8px; border-radius:4px;">${txt.substring(0,1000)}</pre><div style="margin-top:8px"><a class="btn small" href="/">返回首页</a></div></div>`;
+          controls.innerHTML = '';
+          return;
+        }
+
+        const data = await resp.json();
+        if (!data.success) { card.innerHTML = `<div class="not-found"><strong>分享不可用</strong><div style="margin-top:10px; color:var(--muted)">${data.message || ''}</div><div style="margin-top:12px"><a class="btn small" href="/">返回首页</a></div></div>`; controls.innerHTML = ''; return; }
+
+        const it = data.item;
+        // auto-redirect to preview page for common previewable types
+        try {
+            const nameLower = (it.name || it.path || '').toLowerCase();
+            const ext = nameLower.includes('.') ? nameLower.split('.').pop() : '';
+            const imgExt = ['png','jpg','jpeg','gif','bmp','webp','svg','ico'];
+            const videoExt = ['mp4','mkv','avi','mov','wmv','flv','webm'];
+            const docExt = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','md'];
+            if (imgExt.includes(ext) || videoExt.includes(ext) || docExt.includes(ext)) {
+                // redirect to preview with same context
+                const ctx = window.location.pathname.replace(/\/[^/]*$/, '') || '';
+                const base = window.location.origin + ctx;
+                const params = new URLSearchParams({ path: it.path || '', name: it.name || '' });
+                window.location.replace(base + '/preview.html?' + params.toString());
+                return; // stop further rendering
+            }
+        } catch(e) { /* ignore and proceed to show page */ }
+
+        const title = it.name || (it.path || '').split('/').pop();
+        const typeLabel = getTypeLabel(it);
+        document.getElementById('title').textContent = `${title} - ${typeLabel}`;
+        document.getElementById('meta').textContent = '路径: ' + (it.path || '/');
+
+        // fetch metadata (best-effort)
+        let sizeStr = '';
+        let mtimeStr = '';
+        try {
+          const parent = it.path && it.path.lastIndexOf('/')>0 ? it.path.substring(0, it.path.lastIndexOf('/')) : '/';
+          const listResp = await fetch(`${base}/api/directory?action=list&path=${encodeURIComponent(parent)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+          if (listResp.ok) {
+            const listData = await listResp.json();
+            if (listData && listData.items) {
+              const found = (listData.items || []).find(x => x.path === it.path || x.name === it.name);
+              if (found) {
+                sizeStr = found.size ? ('大小: ' + (found.size >= 0 ? (found.size/1024).toFixed(2)+' KB' : '')) : '';
+                mtimeStr = found.modificationTime ? ('修改时间: ' + (new Date(found.modificationTime)).toLocaleString()) : '';
+              }
+            }
+          }
+        } catch(e) { /* ignore */ }
+
+        card.innerHTML = `
+          <div style="display:flex; align-items:center; width:100%;">
+            <div style="flex:0 0 48px; font-size:28px">🔗</div>
+            <div class="file-info">
+              <div><strong>${title}</strong></div>
+              <div class="file-meta">类型: ${typeLabel} ${sizeStr ? ' · ' + sizeStr : ''} ${mtimeStr ? ' · ' + mtimeStr : ''}</div>
+            </div>
+          </div>
+        `;
+
+        controls.innerHTML = '';
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn small';
+        copyBtn.textContent = '复制分享链接';
+        copyBtn.addEventListener('click', async () => { const url = window.location.href; try { await navigator.clipboard.writeText(url); alert('已复制到剪贴板'); } catch(e) { prompt('请复制链接', url); } });
+        controls.appendChild(copyBtn);
+
+        const dl = document.createElement('a'); dl.className = 'btn small'; dl.style.background = 'var(--accent)'; dl.style.marginLeft='8px'; dl.href = `${base}/api/share/download?id=${encodeURIComponent(id)}`; dl.textContent = '下载'; controls.appendChild(dl);
+
+      } catch (err) { card.innerHTML = `<div class="not-found"><strong>加载失败</strong><div style="margin-top:8px; color:var(--muted)">${err.message}</div><div style="margin-top:12px"><a class="btn small" href="/">返回首页</a></div></div>`; controls.innerHTML = ''; }
+    })();
+  </script>
+</body>
+</html>

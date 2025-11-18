@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>预览</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 16px; background:#fff; color:#222 }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { font-size: 18px; margin-bottom: 8px }
+    .meta { margin-bottom: 12px; color:#666 }
+    .preview-area { border: 1px solid #e6e6e6; padding: 12px; min-height: 200px; display:flex; align-items:center; justify-content:center }
+    img, video, iframe { max-width: 100%; max-height: 80vh; }
+    .notice { color:#999 }
+    .controls { margin-top: 12px }
+    .btn { display:inline-block; padding:8px 12px; border-radius:4px; background:#2196F3; color:white; text-decoration:none }
+    pre.preview-text { white-space: pre-wrap; word-break: break-word; max-height: 80vh; overflow:auto; }
+    /* toast for save status */
+    .toast { position: fixed; top: 16px; right: 16px; background: rgba(0,0,0,0.75); color: #fff; padding: 8px 12px; border-radius: 4px; display: none; z-index: 9999; font-size: 13px }
+  </style>
+  <!-- CodeMirror 5 (CDN) + marked for markdown preview -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/idea.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/markdown/markdown.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+ </head>
+ <body>
+  <div id="saveToast" class="toast"></div>
+   <div class="container">
+    <h1 id="title">文件预览</h1>
+    <div class="meta" id="meta"></div>
+    <div class="preview-area" id="previewArea">
+      <div class="notice" id="loading">正在加载...</div>
+    </div>
+    <div class="controls" id="controls"></div>
+  </div>
+
+  <script>
+    (function(){
+      function qs(name){
+        const p = new URLSearchParams(window.location.search);
+        return p.get(name) || '';
+      }
+      const path = qs('path');
+      const name = qs('name') || path.split('/').pop();
+
+      document.getElementById('title').textContent = name + ' — 预览';
+      document.getElementById('meta').textContent = '路径: ' + path;
+
+      if (!path) {
+        document.getElementById('previewArea').innerHTML = '<div class="notice">没有提供 path 参数</div>';
+        return;
+      }
+
+      // decide by extension
+      const ext = (name.split('.').length>1)? name.split('.').pop().toLowerCase() : '';
+      const imgExt = ['png','jpg','jpeg','gif','bmp','webp','svg','ico'];
+      const videoExt = ['mp4','mkv','webm','mov','avi','flv','wmv'];
+      const pdfExt = ['pdf'];
+      const audioExt = ['mp3','wav','ogg'];
+      const textExt = ['txt','md','csv','log','json','xml','properties'];
+
+      // Build backend download URL (same origin)
+      const ctx = window.location.pathname.replace(/\/[^/]*$/, '') || '';
+      const base = window.location.origin + ctx;
+      const downloadUrl = base + '/api/file?action=download&path=' + encodeURIComponent(path);
+
+      // Fetch the file as blob and display
+      fetch(downloadUrl).then(resp => {
+        if (!resp.ok) throw new Error('服务器返回 ' + resp.status);
+        return resp.blob();
+      }).then(async (blob) => {
+        const mime = blob.type || '';
+        const url = URL.createObjectURL(blob);
+        const area = document.getElementById('previewArea');
+        area.innerHTML = '';
+
+        // helper to render controls
+        function renderControls(extraBtns) {
+          const controls = document.getElementById('controls');
+          controls.innerHTML = '';
+          const dl = document.createElement('a');
+          dl.href = url;
+          dl.download = name;
+          dl.className = 'btn';
+          dl.textContent = '下载文件';
+          controls.appendChild(dl);
+          if (extraBtns && Array.isArray(extraBtns)) {
+            // give a small left margin so buttons are not cramped
+            extraBtns.forEach(b => { b.style.marginLeft = '8px'; controls.appendChild(b); });
+          }
+        }
+
+        if (imgExt.includes(ext) || mime.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = name;
+          area.appendChild(img);
+          renderControls();
+        } else if (videoExt.includes(ext) || mime.startsWith('video/')) {
+          const video = document.createElement('video');
+          video.controls = true;
+          video.src = url;
+          video.style.maxHeight = '80vh';
+          area.appendChild(video);
+          renderControls();
+        } else if (pdfExt.includes(ext) || mime === 'application/pdf') {
+          // show in iframe
+          const iframe = document.createElement('iframe');
+          iframe.src = url;
+          iframe.width = '100%';
+          iframe.height = '720';
+          iframe.style.border = 'none';
+          area.appendChild(iframe);
+          renderControls();
+        } else if (audioExt.includes(ext) || mime.startsWith('audio/')) {
+          const audio = document.createElement('audio');
+          audio.controls = true;
+          audio.src = url;
+          area.appendChild(audio);
+          renderControls();
+        } else if (textExt.includes(ext) || mime.startsWith('text/')) {
+          // read text from blob and display
+          try {
+            const text = await blob.text();
+            // create preview container that can be swapped to editor
+            const wrapper = document.createElement('div');
+            wrapper.style.width = '100%';
+            const pre = document.createElement('pre');
+            pre.className = 'preview-text';
+            pre.id = 'previewText';
+            pre.textContent = text;
+            wrapper.appendChild(pre);
+            area.appendChild(wrapper);
+
+            // Create Edit button, Save, Cancel and autosave checkbox
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn';
+            editBtn.textContent = '编辑';
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn';
+            saveBtn.textContent = '保存';
+            saveBtn.style.display = 'none';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn';
+            cancelBtn.textContent = '取消';
+            cancelBtn.style.display = 'none';
+
+            const autoLabel = document.createElement('label');
+            autoLabel.style.marginLeft = '8px';
+            autoLabel.style.color = '#444';
+            const autoCheckbox = document.createElement('input');
+            autoCheckbox.type = 'checkbox';
+            autoCheckbox.id = 'autoSaveChk';
+            autoCheckbox.style.marginRight = '6px';
+            autoLabel.appendChild(autoCheckbox);
+            autoLabel.appendChild(document.createTextNode('自动保存'));
+
+            // Markdown preview toggle (only for md files)
+            const mdPreviewBtn = document.createElement('button');
+            mdPreviewBtn.className = 'btn';
+            mdPreviewBtn.textContent = '预览MD';
+            mdPreviewBtn.style.display = (ext === 'md' || ext === 'markdown') ? '' : 'none';
+            // we'll track whether preview mode is active
+            let mdPreviewActive = false;
+
+             let cm = null; // CodeMirror instance
+             let autosaveTimer = null;
+            const debounceSave = (delay=2000) => {
+              if (!autoCheckbox.checked) return;
+              if (autosaveTimer) clearTimeout(autosaveTimer);
+              autosaveTimer = setTimeout(() => {
+                performSave();
+              }, delay);
+            };
+
+            function detectModeByExt(e) {
+              if (!e) return null;
+              if (e === 'md' || e === 'markdown') return 'markdown';
+              if (e === 'json' || e === 'js') return 'javascript';
+              if (e === 'xml' || e === 'html' || e === 'htm') return 'htmlmixed';
+              if (e === 'css') return 'css';
+              return null;
+            }
+
+            editBtn.addEventListener('click', () => {
+              // create an editor container and instantiate CodeMirror
+              const editorContainer = document.createElement('div');
+              editorContainer.style.width = '100%';
+              editorContainer.style.minHeight = '300px';
+              // replace pre with editor container
+              wrapper.replaceChild(editorContainer, pre);
+              pre.style.display = 'none';
+              saveBtn.style.display = '';
+              cancelBtn.style.display = '';
+              editBtn.style.display = 'none';
+
+              const mode = detectModeByExt(ext);
+              cm = CodeMirror(editorContainer, {
+                value: pre.textContent,
+                lineNumbers: true,
+                mode: mode || 'null',
+                theme: 'idea',
+                lineWrapping: true
+              });
+
+              // change save button when content changes
+              cm.on('change', () => {
+                saveBtn.textContent = '保存*';
+                debounceSave();
+              });
+            });
+
+            // Markdown preview button behavior
+            mdPreviewBtn.addEventListener('click', () => {
+              if (!mdPreviewActive) {
+                // enter preview: if editor exists use its content, otherwise use pre
+                let content = pre.textContent;
+                if (cm) content = cm.getValue();
+                // render markdown to HTML
+                const html = marked.parse(content);
+                const mdContainer = document.createElement('div');
+                mdContainer.innerHTML = html;
+                mdContainer.style.width = '100%';
+                mdContainer.style.padding = '12px';
+                mdContainer.style.border = '1px solid #eee';
+                mdContainer.style.background = '#fff';
+                // replace either editor or pre with mdContainer
+                if (cm) {
+                  const editorEl = cm.getWrapperElement();
+                  wrapper.replaceChild(mdContainer, editorEl);
+                } else {
+                  wrapper.replaceChild(mdContainer, pre);
+                }
+                mdPreviewActive = true;
+                mdPreviewBtn.textContent = '返回编辑';
+              } else {
+                // exit preview: restore editor if it was active, otherwise restore pre
+                const cur = wrapper.querySelector('div');
+                if (cm) {
+                  // re-attach editor DOM
+                  const editorEl = cm.getWrapperElement();
+                  wrapper.replaceChild(editorEl, cur);
+                } else {
+                  wrapper.replaceChild(pre, cur);
+                }
+                mdPreviewActive = false;
+                mdPreviewBtn.textContent = '预览MD';
+              }
+            });
+
+            cancelBtn.addEventListener('click', () => {
+              if (!cm) return;
+              // restore original pre content (discard edits)
+              const editorEl = cm.getWrapperElement();
+              wrapper.replaceChild(pre, editorEl);
+              pre.style.display = '';
+              try { cm.toTextArea && cm.toTextArea(); } catch(e) {}
+              cm = null;
+              saveBtn.style.display = 'none';
+              cancelBtn.style.display = 'none';
+              editBtn.style.display = '';
+              saveBtn.textContent = '保存';
+              if (autosaveTimer) clearTimeout(autosaveTimer);
+            });
+
+            async function performSave() {
+              if (!cm) return;
+              const content = cm.getValue();
+               saveBtn.disabled = true;
+               saveBtn.textContent = '保存中...';
+               try {
+                 const resp = await fetch(base + '/api/file?action=save', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ path: path, content: content })
+                 });
+                 const textResp = await resp.text();
+                 // try to parse JSON
+                 let data = null;
+                 try { data = JSON.parse(textResp); } catch(e) { throw new Error('服务器返回非 JSON: ' + textResp.substring(0,200)); }
+                 if (data && data.success) {
+                   // reflect saved content into pre and keep editor open
+                   pre.textContent = content;
+                   // show toast in top-right
+                   showToast('已保存', 1400);
+                   saveBtn.textContent = '保存';
+                   saveBtn.disabled = false;
+                 } else {
+                   throw new Error((data && data.message) ? data.message : '保存失败');
+                 }
+               } catch (e) {
+                 saveBtn.textContent = '保存';
+                 saveBtn.disabled = false;
+                showToast('保存失败: ' + e.message, 4000);
+               }
+             }
+
+             saveBtn.addEventListener('click', async () => {
+               await performSave();
+             });
+
+             // Attach all buttons to controls area
+             renderControls([editBtn, saveBtn, cancelBtn, mdPreviewBtn, autoLabel]);
+
+            // toast helper
+            function showToast(msg, timeout) {
+              const t = document.getElementById('saveToast');
+              if (!t) return;
+              t.textContent = msg;
+              t.style.display = 'block';
+              if (timeout && timeout > 0) {
+                setTimeout(() => { t.style.display = 'none'; }, timeout);
+              }
+            }
+
+           } catch (e) {
+             area.innerHTML = '<div class="notice">无法读取文本内容: ' + e.message + '</div>';
+           }
+         } else {
+          area.innerHTML = '<div class="notice">无法在线预览该类型文件，您可以下载后查看。</div>';
+          renderControls();
+        }
+
+        // release object URL when page unloads
+        window.addEventListener('unload', () => URL.revokeObjectURL(url));
+      }).catch(err => {
+        document.getElementById('previewArea').innerHTML = '<div class="notice">预览失败: ' + err.message + '</div>';
+      });
+    })();
+  </script>
+</body>
+</html>

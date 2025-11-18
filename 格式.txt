@@ -1,0 +1,4 @@
+图片格式： bmp，jpg，png，tif，gif，pcx，tga，exif，fpx，svg，psd，cdr，pcd，dxf，ufo，eps，ai，raw，WMF，webp，avif，apng等
+视频格式： MP4，MOV，WMV，FLV，AVI，AVCHD，WebM，MKV等
+压缩包格式： 7z，rar，zip，tgz
+文档格式：pdf、docx、xlsx、log、txt等

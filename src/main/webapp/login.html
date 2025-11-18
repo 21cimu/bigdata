@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>登录 - 个人云盘</title>
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%231976D2'/><text x='8' y='11' font-size='10' text-anchor='middle' fill='white'>H</text></svg>">
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- try-style: 新登录样式 -->
+  <link rel="stylesheet" href="css/try-style.css" />
+</head>
+<body>
+  <!-- 使用 try 页面样式与结构，但保留原有登录逻辑 -->
+  <div class="main">
+    <!-- 顶部标识，和主页一致 -->
+    <h1 class="logo" style="position:absolute; top:26px; left:24px; z-index:999; font-size:20px;">
+      <svg width="28" height="28" viewBox="0 0 32 32" style="display:inline-block; vertical-align:middle;">
+        <path fill="#2196F3" d="M25 10c-1.3 0-2.5.4-3.5 1.1-1.3-3.4-4.6-5.8-8.5-5.8-4.9 0-8.9 4-8.9 8.9 0 .5 0 1 .1 1.5C2 16.5 1 18.6 1 21c0 3.3 2.7 6 6 6h18c3.3 0 6-2.7 6-6s-2.7-6-6-6z"/>
+      </svg>
+      UU云盘
+    </h1>
+    <div class="container a-container is-hidden" id="a-container">
+      <form class="form" id="a-form">
+        <h2 class="form_title title">Create Account</h2>
+        <label class="sr-only" for="reg_name">注册用户名</label>
+        <input class="form__input" id="reg_name" type="text" placeholder="Name">
+        <label class="sr-only" for="reg_password">注册密码</label>
+        <input class="form__input" id="reg_password" type="password" placeholder="Password">
+        <label class="sr-only" for="reg_password2">确认密码</label>
+        <input class="form__input" id="reg_password2" type="password" placeholder="Confirm Password">
+        <button class="form__button button submit" id="regBtn">注 册</button>
+      </form>
+    </div>
+    <div class="container b-container is-z200" id="b-container">
+      <form class="form" id="b-form">
+        <h2 class="form_title title">Sign in to Username</h2>
+        <label class="sr-only" for="username">用户名</label>
+        <input class="form__input" id="username" name="username" type="text" autocomplete="username" placeholder="Username">
+        <label class="sr-only" for="password">密码</label>
+        <input class="form__input" id="password" name="password" type="password" autocomplete="current-password" placeholder="Password">
+        <button class="form__button button submit" id="loginBtn">登 陆</button>
+      </form>
+    </div>
+    <div class="switch" id="switch-cnt">
+      <div class="switch__circle"></div>
+      <div class="switch__circle switch__circle--t"></div>
+      <div class="switch__container" id="switch-c1">
+        <h2 class="switch__title title">Hello Friend !</h2>
+        <p class="switch__description description">Enter your personal details and start journey with us</p>
+        <button class="switch__button button switch-btn">注 册</button>
+      </div>
+      <div class="switch__container is-hidden" id="switch-c2">
+        <h2 class="switch__title title">Welcome Back !</h2>
+        <p class="switch__description description">To keep connected with us please login with your personal info</p>
+        <button class="switch__button button switch-btn">登 陆</button>
+      </div>
+    </div>
+  </div>
+  <div id="msg" style="position:fixed;left:16px;bottom:16px;color:#b00020;"></div>
+
+  <!-- 加载 try JS（处理样式切换）并保留下方内联脚本用于登录/注册逻辑 -->
+  <script src="js/try-main.js"></script>
+  <script>
+    (async function(){
+      const base = window.location.origin + window.location.pathname.replace(/\/[^^/]*$/, '');
+      const status = document.getElementById('msg');
+      try {
+        const r = await fetch(base + '/api/auth?action=current');
+        const data = await r.json();
+        if (data && data.loggedIn) {
+          const uname = data.username || (data.user && (data.user.username || data.user.userName || data.user.name));
+          if (uname && String(uname).toLowerCase() === 'root') { window.location.href = base + '/admin.html'; return; }
+          window.location.href = base + '/index.html'; return;
+        }
+      } catch (e) { console.debug('current check failed', e); }
+
+      // 登录按钮（b-form）
+      const loginBtn = document.getElementById('loginBtn');
+      loginBtn.addEventListener('click', async (ev) => {
+        ev.preventDefault(); status.textContent = '';
+        const u = document.getElementById('username').value.trim();
+        const p = document.getElementById('password').value;
+        if (!u || !p) { status.textContent = '用户名和密码不能为空'; return; }
+        try {
+          const body = new URLSearchParams();
+          body.append('action','login'); body.append('username', u); body.append('password', p); body.append('debug', '1');
+          const resp = await fetch(base + '/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+          if (!resp.ok) { let text; try { text = await resp.text(); const json = JSON.parse(text); status.textContent = json.message || JSON.stringify(json); } catch (e) { status.textContent = '登录失败: ' + (text || resp.statusText || resp.status); } return; }
+          const res = await resp.json();
+          if (res && res.success) {
+            const uname = (res.username || '').toString().toLowerCase();
+            if (uname === 'root') { window.location.href = base + '/admin.html'; }
+            else { window.location.href = base + '/index.html'; }
+          } else { status.textContent = res && res.message ? res.message : '登录失败'; }
+        } catch (er) { status.textContent = '登录请求失败: ' + er.message; }
+      });
+
+      // 注册按钮（仅本地前端触发，实际注册页面仍为 register.html）
+      const regBtn = document.getElementById('regBtn');
+      // 新：在此页面直接调用后端注册 API
+      if (regBtn) regBtn.addEventListener('click', async (ev)=>{
+        ev.preventDefault(); status.textContent = ''; status.style.color = '#b00020';
+        const u = document.getElementById('reg_name').value.trim();
+        const p = document.getElementById('reg_password').value;
+        const p2 = document.getElementById('reg_password2').value;
+        if (!u || !p) { status.textContent = '用户名和密码不能为空'; return; }
+        if (u.length < 3) { status.textContent = '用户名需至少 3 个字符'; return; }
+        if (p.length < 4) { status.textContent = '密码需至少 4 个字符'; return; }
+        if (p !== p2) { status.textContent = '两次输入的密码不一致'; return; }
+        try {
+          const body = new URLSearchParams();
+          body.append('action','register'); body.append('username', u); body.append('password', p); body.append('debug', '1');
+          const resp = await fetch(base + '/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+          if (!resp.ok) {
+            let text; try { text = await resp.text(); const json = JSON.parse(text); status.textContent = json.message || JSON.stringify(json); } catch (e) { status.textContent = '注册失败: ' + (text || resp.statusText || resp.status); }
+            return;
+          }
+          const res = await resp.json();
+          if (res && res.success) {
+            status.style.color = '#1a7f1a'; status.textContent = '注册成功，正在跳转...';
+            setTimeout(()=>{ window.location.href = base + '/index.html'; }, 1200);
+          } else {
+            status.textContent = res && res.message ? res.message : '注册失败';
+          }
+        } catch (er) { status.textContent = '注册请求失败: ' + er.message; }
+      });
+    })();
+  </script>
+</body>
+</html>

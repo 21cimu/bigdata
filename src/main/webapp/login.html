@@ -66,6 +66,50 @@
     (async function(){
       const base = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '');
       const status = document.getElementById('msg');
+
+      // helper to show a message using notify if available, otherwise fall back to the status element
+      function showMsg(type, message) {
+        try {
+          // prefer window.notify when available
+          if (window.notify) {
+            if (type === 'success') window.notify.success(message);
+            else if (type === 'error') window.notify.error(message);
+            else window.notify.info(message);
+            return;
+          }
+        } catch (e) {
+          // fallthrough to DOM fallback
+        }
+        // DOM fallback: show in the status element
+        try {
+          if (status) {
+            status.textContent = message;
+            if (type === 'error') status.style.color = '#b00020';
+            else if (type === 'success') status.style.color = '#1a7f1a';
+            else status.style.color = '';
+          }
+        } catch (e) { /* ignore */ }
+
+        // If notify script isn't yet loaded (notify scripts are included after this inline script),
+        // poll a few times to show the same message via notification once notify becomes available.
+        let attempts = 0;
+        const iv = setInterval(() => {
+          attempts++;
+          try {
+            if (window.notify) {
+              if (type === 'success') window.notify.success(message);
+              else if (type === 'error') window.notify.error(message);
+              else window.notify.info(message);
+              // clear status element after showing notify to avoid duplicate UI
+              try { if (status) { status.textContent = ''; status.style.color = ''; } } catch (e) {}
+              clearInterval(iv);
+            } else if (attempts > 12) {
+              clearInterval(iv);
+            }
+          } catch (e) { clearInterval(iv); }
+        }, 120);
+      }
+
       try {
         const r = await fetch(base + '/api/auth?action=current');
         const data = await r.json();
@@ -79,15 +123,20 @@
       // 登录按钮（b-form）
       const loginBtn = document.getElementById('loginBtn');
       loginBtn.addEventListener('click', async (ev) => {
-        ev.preventDefault(); status.textContent = '';
+        ev.preventDefault();
+        try { if (status) { status.textContent = ''; status.style.color = ''; } } catch(e){}
         const u = document.getElementById('username').value.trim();
         const p = document.getElementById('password').value;
-        if (!u || !p) { status.textContent = '用户名和密码不能为空'; return; }
+        if (!u || !p) { showMsg('error', '用户名和密码不能为空'); return; }
         try {
           const body = new URLSearchParams();
           body.append('action','login'); body.append('username', u); body.append('password', p); body.append('debug', '1');
           const resp = await fetch(base + '/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
-          if (!resp.ok) { let text; try { text = await resp.text(); const json = JSON.parse(text); status.textContent = json.message || JSON.stringify(json); } catch (e) { status.textContent = '登录失败: ' + (text || resp.statusText || resp.status); } return; }
+          if (!resp.ok) {
+            let text;
+            try { text = await resp.text(); const json = JSON.parse(text); showMsg('error', json.message || JSON.stringify(json)); } catch (e) { showMsg('error', '登录失败: ' + (text || resp.statusText || resp.status)); }
+            return;
+          }
           const res = await resp.json();
           if (res && res.success) {
             const uname = (res.username || '').toString().toLowerCase();
@@ -97,38 +146,39 @@
               try { localStorage.setItem('lastNotify', JSON.stringify({ type: 'success', message: '登录成功' })); } catch (e) { }
               window.location.href = base + '/index.html';
             }
-          } else { status.textContent = res && res.message ? res.message : '登录失败'; }
-        } catch (er) { status.textContent = '登录请求失败: ' + er.message; }
+          } else { showMsg('error', res && res.message ? res.message : '登录失败'); }
+        } catch (er) { showMsg('error', '登录请求失败: ' + er.message); }
       });
 
       // 注册按钮（仅本地前端触发）——注册功能已在此登录页内实现，下面的逻辑直接调用后端注册 API
       const regBtn = document.getElementById('regBtn');
       if (regBtn) regBtn.addEventListener('click', async (ev)=>{
-        ev.preventDefault(); status.textContent = ''; status.style.color = '#b00020';
+        ev.preventDefault();
+        try { if (status) { status.textContent = ''; status.style.color = '#b00020'; } } catch(e){}
         const u = document.getElementById('reg_name').value.trim();
         const p = document.getElementById('reg_password').value;
         const p2 = document.getElementById('reg_password2').value;
-        if (!u || !p) { status.textContent = '用户名和密码不能为空'; return; }
-        if (u.length < 3) { status.textContent = '用户名需至少 3 个字符'; return; }
-        if (p.length < 4) { status.textContent = '密码需至少 4 个字符'; return; }
-        if (p !== p2) { status.textContent = '两次输入的密码不一致'; return; }
+        if (!u || !p) { showMsg('error', '用户名和密码不能为空'); return; }
+        if (u.length < 3) { showMsg('error', '用户名需至少 3 个字符'); return; }
+        if (p.length < 4) { showMsg('error', '密码需至少 4 个字符'); return; }
+        if (p !== p2) { showMsg('error', '两次输入的密码不一致'); return; }
         try {
           const body = new URLSearchParams();
           body.append('action','register'); body.append('username', u); body.append('password', p); body.append('debug', '1');
           const resp = await fetch(base + '/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
           if (!resp.ok) {
-            let text; try { text = await resp.text(); const json = JSON.parse(text); status.textContent = json.message || JSON.stringify(json); } catch (e) { status.textContent = '注册失败: ' + (text || resp.statusText || resp.status); }
+            let text; try { text = await resp.text(); const json = JSON.parse(text); showMsg('error', json.message || JSON.stringify(json)); } catch (e) { showMsg('error', '注册失败: ' + (text || resp.statusText || resp.status)); }
             return;
           }
           const res = await resp.json();
           if (res && res.success) {
-            status.style.color = '#1a7f1a'; status.textContent = '注册成功，正在跳转...';
+            showMsg('success', '注册成功，正在跳转...');
             try { localStorage.setItem('lastNotify', JSON.stringify({ type: 'success', message: '注册成功' })); } catch (e) {}
             setTimeout(()=>{ window.location.href = base + '/index.html'; }, 1200);
           } else {
-            status.textContent = res && res.message ? res.message : '注册失败';
+            showMsg('error', res && res.message ? res.message : '注册失败');
           }
-        } catch (er) { status.textContent = '注册请求失败: ' + er.message; }
+        } catch (er) { showMsg('error', '注册请求失败: ' + er.message); }
       });
     })();
   </script>

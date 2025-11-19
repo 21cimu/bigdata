@@ -1972,4 +1972,19 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
         console.error('Failed to initialize CloudDrive:', e);
     }
+
+    // Defensive auto-load: if the app didn't load items during init (some failures or race),
+    // call loadDirectory once after a short delay. This ensures users redirected from the login
+    // page see their files immediately without clicking "加载".
+    setTimeout(() => {
+        try {
+            if (window.app && typeof window.app.loadDirectory === 'function') {
+                // if lastItems is null or empty, trigger a reload
+                if (!window.app.lastItems || (Array.isArray(window.app.lastItems) && window.app.lastItems.length === 0)) {
+                    console.debug('Auto-invoking loadDirectory to ensure data is loaded after init');
+                    window.app.loadDirectory(window.app.currentPath || '/');
+                }
+            }
+        } catch (e) { console.debug('auto-loadDirectory failed', e); }
+    }, 420);
 });

@@ -402,11 +402,22 @@ class CloudDrive {
     // Start periodic purge/check when in trash view
     startTrashWatcher() {
         if (this._trashPurgeTimer) return;
+        const attemptPurgeAndReload = async () => {
+            try {
+                const data = await this.doPurge();
+                if (data && data.success && Array.isArray(data.purged) && data.purged.length > 0) {
+                    // only reload when something was actually purged
+                    await this.loadDirectory(this.currentPath);
+                }
+            } catch (e) {
+                console.debug('purge attempt failed', e);
+            }
+        };
         // immediate attempt to purge once
-        this.doPurge().catch(e => console.debug('initial purge failed', e));
+        attemptPurgeAndReload();
         // call backend purge every 30s
         this._trashPurgeTimer = setInterval(() => {
-            this.doPurge().catch(e => console.debug('purge failed', e));
+            attemptPurgeAndReload();
         }, 30*1000);
         // update countdown display every 60s
         this._trashRefreshTimer = setInterval(() => {
@@ -427,11 +438,8 @@ class CloudDrive {
         try {
             const resp = await fetch(`${this.base}/api/directory?action=purge`);
             const data = await this.parseJson(resp);
-            if (data && data.success && Array.isArray(data.purged) && data.purged.length > 0) {
-                console.debug('purged items:', data.purged);
-                // reload to reflect removed items
-                await this.loadDirectory(this.currentPath);
-            }
+            // DO NOT trigger loadDirectory here to avoid nested reload loops.
+            // The caller should decide whether to reload based on returned data.
             return data;
         } catch (e) {
             console.debug('doPurge error', e);
@@ -730,6 +738,8 @@ class CloudDrive {
     async loadDirectory(path) {
         try { window.__appTrace && window.__appTrace('loadDirectory: start path=' + path); } catch(e){}
          this.currentPath = path;
+         // If we're loading a non-trash path, ensure trash watcher timers are stopped so they don't trigger background reloads
+         try { if (!this.currentPath || !this.currentPath.startsWith('/.trash')) this.stopTrashWatcher(); } catch(e) { console.debug('stopTrashWatcher call failed', e); }
          this.showLoading();
          // update list status
          const statusEl = document.getElementById('listStatus');
@@ -853,7 +863,7 @@ class CloudDrive {
                     // debug response was not JSON (likely an HTML error page) — show a short preview
                     const preview = debugText.length > 1000 ? debugText.substring(0, 1000) + '...' : debugText;
                     console.debug('Debug fetch returned non-JSON response preview:', preview);
-                    await this.alertModal('调试请求没有返回 JSON，返回内容预览:\n' + preview, '调试信息');
+                    await this.alertModal('调试请求没有返回 JSON，返回内容预览:\n' + preview, '��试信息');
                 }
             } catch (dbgErr) {
                 console.debug('Debug fetch after exception failed:', dbgErr.message);
@@ -1831,10 +1841,12 @@ class CloudDrive {
             const delay = Math.max(0, minMs + 500);
             this._trashExactTimer = setTimeout(async () => {
                 try {
-                    await this.doPurge();
+                    const data = await this.doPurge();
+                    if (data && data.success && Array.isArray(data.purged) && data.purged.length > 0) {
+                        // reload list to reflect changes
+                        if (this.currentPath && this.currentPath.startsWith('/.trash')) await this.loadDirectory(this.currentPath);
+                    }
                 } catch (e) { console.debug('exact purge failed', e); }
-                // reload list to reflect changes
-                if (this.currentPath && this.currentPath.startsWith('/.trash')) await this.loadDirectory(this.currentPath);
             }, delay);
         } catch (e) { console.debug('scheduleNextPurge error', e); }
     }

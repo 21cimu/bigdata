@@ -1,12 +1,11 @@
-package com.hdfsdrive.web;
+package com.hdfsdrive.web.file;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hdfsdrive.core.HdfsService;
 import com.hdfsdrive.core.TrashService;
+import com.hdfsdrive.web.common.AbstractHdfsServlet;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -31,14 +30,8 @@ import java.util.Map;
     maxFileSize = 1024 * 1024 * 100,       // 100MB
     maxRequestSize = 1024 * 1024 * 100     // 100MB
 )
-public class FileServlet extends HttpServlet {
-    // no long-lived HdfsService; create per-request
-    private static final String DEFAULT_HDFS_URI = "hdfs://node1:8020";
-    private static final String DEFAULT_ADMIN_USER = "root";
-    private static final String USER_ROOT = "/users";
-
+public class FileServlet extends AbstractHdfsServlet {
     private TrashService trashService;
-    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public void init() throws ServletException {
@@ -48,63 +41,6 @@ public class FileServlet extends HttpServlet {
         } catch (Exception e) {
             throw new ServletException("Failed to initialize FileServlet", e);
         }
-    }
-
-    private HdfsService createHdfsService(HttpServletRequest req) throws Exception {
-        HttpSession s = req.getSession(false);
-        String user = DEFAULT_ADMIN_USER;
-        if (s != null && s.getAttribute("username") != null) {
-            user = String.valueOf(s.getAttribute("username"));
-        }
-        return new HdfsService(DEFAULT_HDFS_URI, user, new Configuration());
-    }
-
-    private HdfsService createAdminHdfsService() throws Exception {
-        return new HdfsService(DEFAULT_HDFS_URI, DEFAULT_ADMIN_USER, new Configuration());
-    }
-
-    // --- per-user path helpers (same behavior as DirectoryServlet) ---
-    private String getSessionUsername(HttpServletRequest req) {
-        HttpSession s = req.getSession(false);
-        if (s == null) return null;
-        Object o = s.getAttribute("username");
-        return o == null ? null : String.valueOf(o);
-    }
-
-    private boolean isAdmin(HttpServletRequest req) {
-        String u = getSessionUsername(req);
-        return u != null && DEFAULT_ADMIN_USER.equals(u);
-    }
-
-    private String actualRootForUser(String username) {
-        return USER_ROOT + "/" + username;
-    }
-
-    private String resolveToActualPath(HttpServletRequest req, String virtualPath) throws SecurityException {
-        if (virtualPath == null || virtualPath.isEmpty()) virtualPath = "/";
-        if (virtualPath.startsWith("/.type/") || virtualPath.startsWith("/.trash")) return virtualPath;
-        if (isAdmin(req)) return virtualPath;
-        String user = getSessionUsername(req);
-        if (user == null) throw new SecurityException("Not logged in");
-        String actualRoot = actualRootForUser(user);
-        if (virtualPath.startsWith(USER_ROOT + "/")) {
-            if (virtualPath.equals(actualRoot) || virtualPath.startsWith(actualRoot + "/")) return virtualPath;
-            throw new SecurityException("Access denied");
-        }
-        if (virtualPath.equals("/")) return actualRoot;
-        if (!virtualPath.startsWith("/")) virtualPath = "/" + virtualPath;
-        return actualRoot + virtualPath;
-    }
-
-    private String toVirtualPath(HttpServletRequest req, String actualPath) {
-        if (actualPath == null) return null;
-        if (isAdmin(req)) return actualPath;
-        String user = getSessionUsername(req);
-        if (user == null) return actualPath;
-        String actualRoot = actualRootForUser(user);
-        if (actualPath.equals(actualRoot)) return "/";
-        if (actualPath.startsWith(actualRoot + "/")) return actualPath.substring(actualRoot.length());
-        return actualPath;
     }
 
     @Override
@@ -607,36 +543,6 @@ public class FileServlet extends HttpServlet {
             }
         }
         return "unknown";
-    }
-
-    private void sendJson(HttpServletResponse resp, Object data) throws IOException {
-        resp.setContentType("application/json;charset=UTF-8");
-        objectMapper.writeValue(resp.getWriter(), data);
-    }
-
-    private void sendError(HttpServletResponse resp, String message) throws IOException {
-        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        Map<String, Object> error = new HashMap<>();
-        error.put("success", false);
-        error.put("message", message);
-        sendJson(resp, error);
-    }
-
-    // Append an admin operation log entry under WEB-INF/logs/admin-operations.log
-    private void appendAdminLog(HttpServletRequest req, String action, String path, String extra) {
-        try {
-            String logsDir = getServletContext().getRealPath("/WEB-INF/logs");
-            if (logsDir == null) return;
-            java.io.File dir = new java.io.File(logsDir);
-            if (!dir.exists()) dir.mkdirs();
-            java.io.File f = new java.io.File(dir, "admin-operations.log");
-            String user = getSessionUsername(req);
-            String ts = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
-            String line = String.format("%s\tuser=%s\taction=%s\tpath=%s\tinfo=%s\n", ts, user == null ? "(anon)" : user, action, path == null ? "(none)" : path, extra == null ? "" : extra.replace('\n',' '));
-            try (java.io.FileWriter fw = new java.io.FileWriter(f, true); java.io.PrintWriter pw = new java.io.PrintWriter(fw)) {
-                pw.print(line);
-            }
-        } catch (Throwable ignore) {}
     }
 
 }

@@ -1,4 +1,4 @@
-package com.hdfsdrive.web;
+package com.hdfsdrive.web.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hdfsdrive.core.HdfsService;

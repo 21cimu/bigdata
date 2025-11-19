@@ -1,9 +1,9 @@
-package com.hdfsdrive.web;
+package com.hdfsdrive.web.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hdfsdrive.core.HdfsService;
 import com.hdfsdrive.core.User;
 import com.hdfsdrive.core.UserDao;
-import com.hdfsdrive.core.HdfsService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;

@@ -1,4 +1,4 @@
-package com.hdfsdrive.web;
+package com.hdfsdrive.web.share;
 
 import com.hdfsdrive.core.ShareService;
 import jakarta.servlet.ServletException;

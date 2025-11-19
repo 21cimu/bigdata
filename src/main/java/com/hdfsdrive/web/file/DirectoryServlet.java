@@ -1,18 +1,21 @@
-package com.hdfsdrive.web;
+package com.hdfsdrive.web.file;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hdfsdrive.core.HdfsService;
 import com.hdfsdrive.core.TrashService;
+import com.hdfsdrive.web.common.AbstractHdfsServlet;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
-import org.apache.hadoop.conf.Configuration;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -21,15 +24,8 @@ import java.util.concurrent.TimeUnit;
  * Servlet for directory operations: list, create, delete directories in HDFS
  */
 @WebServlet("/api/directory/*")
-public class DirectoryServlet extends HttpServlet {
-    // Do not keep a long-lived HdfsService: create per-request using session username
-    private static final String DEFAULT_HDFS_URI = "hdfs://node1:8020";
-    private static final String DEFAULT_ADMIN_USER = "root";
-    // per-user root in HDFS where each user's files reside
-    private static final String USER_ROOT = "/users";
-
+public class DirectoryServlet extends AbstractHdfsServlet {
     private TrashService trashService;
-    private ObjectMapper objectMapper = new ObjectMapper();
     // scheduler to purge expired trash entries periodically
     private ScheduledExecutorService purgeScheduler;
     // mapping from type key to list of extensions (lowercase, without dot)
@@ -92,84 +88,6 @@ public class DirectoryServlet extends HttpServlet {
             } catch (Exception e) { /* ignore */ }
         }
         super.destroy();
-    }
-
-    private HdfsService createHdfsService(HttpServletRequest req) throws Exception {
-        HttpSession s = req.getSession(false);
-        String user = DEFAULT_ADMIN_USER;
-        if (s != null && s.getAttribute("username") != null) {
-            user = String.valueOf(s.getAttribute("username"));
-        }
-        return new HdfsService(DEFAULT_HDFS_URI, user, new Configuration());
-    }
-
-    private HdfsService createAdminHdfsService() throws Exception {
-        return new HdfsService(DEFAULT_HDFS_URI, DEFAULT_ADMIN_USER, new Configuration());
-    }
-
-    // --- helpers for per-user path mapping and authorization ---
-    private String getSessionUsername(HttpServletRequest req) {
-        HttpSession s = req.getSession(false);
-        if (s == null) return null;
-        Object o = s.getAttribute("username");
-        return o == null ? null : String.valueOf(o);
-    }
-
-    private boolean isAdmin(HttpServletRequest req) {
-        String u = getSessionUsername(req);
-        return u != null && DEFAULT_ADMIN_USER.equals(u);
-    }
-
-    private String actualRootForUser(String username) {
-        return USER_ROOT + "/" + username;
-    }
-
-    /**
-     * Resolve a virtual path (as provided by the frontend) to an actual HDFS path.
-     * For non-admin users, virtual paths are relative to /users/<username>.
-     * For admin users the path is used as-is.
-     * Throws SecurityException if a non-admin tries to access another user's path.
-     */
-    private String resolveToActualPath(HttpServletRequest req, String virtualPath) throws SecurityException {
-        if (virtualPath == null || virtualPath.isEmpty()) virtualPath = "/";
-        // special virtual namespaces are not mapped
-        if (virtualPath.startsWith("/.type/") || virtualPath.startsWith("/.trash")) return virtualPath;
-        if (isAdmin(req)) {
-            return virtualPath;
-        }
-        String user = getSessionUsername(req);
-        if (user == null) throw new SecurityException("Not logged in");
-        String actualRoot = actualRootForUser(user);
-        // if user passed an absolute HDFS path under /users, ensure it's their own
-        if (virtualPath.startsWith(USER_ROOT + "/")) {
-            if (virtualPath.equals(actualRoot) || virtualPath.startsWith(actualRoot + "/")) {
-                return virtualPath;
-            }
-            throw new SecurityException("Access denied");
-        }
-        // treat virtual '/' as the user's root
-        if (virtualPath.equals("/")) return actualRoot;
-        // otherwise prepend user's root
-        if (!virtualPath.startsWith("/")) virtualPath = "/" + virtualPath;
-        return actualRoot + virtualPath;
-    }
-
-    /**
-     * Convert an actual HDFS path back to the virtual path visible to the current user.
-     * For admin users, return as-is.
-     */
-    private String toVirtualPath(HttpServletRequest req, String actualPath) {
-        if (actualPath == null) return null;
-        if (isAdmin(req)) return actualPath;
-        String user = getSessionUsername(req);
-        if (user == null) return actualPath;
-        String actualRoot = actualRootForUser(user);
-        if (actualPath.equals(actualRoot)) return "/";
-        if (actualPath.startsWith(actualRoot + "/")) {
-            return actualPath.substring(actualRoot.length());
-        }
-        // not under user's root -> hide real path
-        return actualPath;
     }
 
     private void initDefaultTypeExts() {
@@ -686,36 +604,6 @@ public class DirectoryServlet extends HttpServlet {
         } catch (Exception e) {
             sendError(resp, "Search failed: " + e.getMessage());
         }
-    }
-
-    private void sendJson(HttpServletResponse resp, Object data) throws IOException {
-        resp.setContentType("application/json;charset=UTF-8");
-        objectMapper.writeValue(resp.getWriter(), data);
-    }
-
-    private void sendError(HttpServletResponse resp, String message) throws IOException {
-        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        Map<String, Object> error = new HashMap<>();
-        error.put("success", false);
-        error.put("message", message);
-        sendJson(resp, error);
-    }
-
-    // Append an admin operation log entry under WEB-INF/logs/admin-operations.log
-    private void appendAdminLog(HttpServletRequest req, String action, String path, String extra) {
-        try {
-            String logsDir = getServletContext().getRealPath("/WEB-INF/logs");
-            if (logsDir == null) return;
-            java.io.File dir = new java.io.File(logsDir);
-            if (!dir.exists()) dir.mkdirs();
-            java.io.File f = new java.io.File(dir, "admin-operations.log");
-            String user = getSessionUsername(req);
-            String ts = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
-            String line = String.format("%s\tuser=%s\taction=%s\tpath=%s\tinfo=%s\n", ts, user == null ? "(anon)" : user, action, path == null ? "(none)" : path, extra == null ? "" : extra.replace('\n',' '));
-            try (java.io.FileWriter fw = new java.io.FileWriter(f, true); java.io.PrintWriter pw = new java.io.PrintWriter(fw)) {
-                pw.print(line);
-            }
-        } catch (Throwable ignore) {}
     }
 
 }

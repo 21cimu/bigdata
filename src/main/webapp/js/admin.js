@@ -90,89 +90,150 @@
      loadInfoFiles().catch(()=>{});
    }
 
+   // Updated bindNav: listens on .nav-header and respects new structure
    function bindNav(){
-     document.querySelectorAll('.admin-sidebar .nav-item').forEach(item => {
-       item.addEventListener('click', () => {
-         // when switching top-level panels, clear any sub-item highlights
-         document.querySelectorAll('.admin-sidebar .sub-item').forEach(s => s.classList.remove('active'));
-         // toggle open/close for info item (use class to control CSS display)
-         if (item.getAttribute('data-panel') === 'info') {
-           const wasOpen = item.classList.contains('open');
-           // close other nav items
-           document.querySelectorAll('.admin-sidebar .nav-item').forEach(n => n.classList.remove('open'));
-           if (!wasOpen) {
-             item.classList.add('open');
-             // ensure info sub-nav default selection is 用户文件
-             const def = document.querySelector('.admin-sidebar .sub-item[data-action="infoFiles"]');
-             if (def) {
-               document.querySelectorAll('.admin-sidebar .sub-item').forEach(s=>s.classList.remove('active'));
-               def.classList.add('active');
-             }
-             // load users root when opening
-             appendDebug('nav click: open info -> load /users');
-             loadInfoFiles('/users');
-           } else {
-             item.classList.remove('open');
-           }
+     // 绑定所有导航组头部点击事件
+     document.querySelectorAll('.admin-sidebar .nav-group .nav-header').forEach(header => {
+       header.addEventListener('click', () => {
+         const group = header.closest('.nav-group');
+         const panelName = group.getAttribute('data-panel');
+         const hasSubNav = group.querySelector('.sub-nav');
+
+         // 1. 处理样式交互
+         if (hasSubNav) {
+           // 如果有子菜单，点击 header 仅切换展开/折叠，不作为“选中”状态（高亮留给子项）
+           group.classList.toggle('open');
          } else {
-           // ensure info nav closed if other top-level clicked
-           const infoNav = document.querySelector('.admin-sidebar .nav-item[data-panel="info"]');
-           if (infoNav) infoNav.classList.remove('open');
+           // 如果没有子菜单（如用户管理），点击 header 即视为选中
+           // 清除所有选中状态
+           document.querySelectorAll('.nav-header, .sub-item').forEach(el => el.classList.remove('active'));
+           // 高亮当前 header
+           header.classList.add('active');
+           // 关闭其他已展开的组（可选，根据需求决定是否手风琴效果，这里暂时保留独立展开）
+           // document.querySelectorAll('.nav-group').forEach(g => { if(g!==group) g.classList.remove('open'); });
          }
-         appendDebug('nav click: panel=' + item.getAttribute('data-panel'));
-         document.querySelectorAll('.admin-sidebar .nav-item').forEach(i=>i.classList.remove('active'));
-         item.classList.add('active');
-         const panel = item.getAttribute('data-panel');
-         // hide all panels first
-         document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
-         // show the correct panel; info panel handled by sub-item selection
-         if (panel && panel !== 'info') {
-           const target = el('panel-' + panel);
-           if (target) target.style.display = '';
-         } else if (panel === 'info') {
-           // show panel-info (sub-item click will control content)
-           const target = el('panel-info'); if (target) target.style.display = '';
+
+         // 2. 处理面板切换逻辑
+         // 仅当是顶级菜单且无子菜单，或者这是信息管理组(默认行为)时触发
+         // 注意：对于信息管理，内容的切换主要由 sub-item 点击触发，这里主要处理初次展开
+
+         if (panelName === 'info') {
+           // 信息管理被点击（展开）时，确保默认显示文件面板，并高亮默认子项（如果当前没有高亮项）
+           if (group.classList.contains('open')) {
+             const activeSub = group.querySelector('.sub-item.active');
+             if (!activeSub) {
+                const def = group.querySelector('.sub-item[data-action="infoFiles"]');
+                if(def) {
+                    def.classList.add('active');
+                    loadInfoFiles('/users'); // 加载默认视图
+                }
+             }
+             // 确保面板可见
+             document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
+             const t = el('panel-info'); if (t) t.style.display = '';
+           }
+         } else if (panelName === 'users') {
+             // 用户管理
+             document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
+             const t = el('panel-users'); if (t) t.style.display = '';
+         } else if (panelName === 'board') {
+             // 公告板展示视图
+             document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
+             const t = el('panel-board'); if (t) t.style.display = '';
+             loadBulletinBoard();
          }
        });
      });
 
-     // bind sub-items (info panel submenu)
+     // 绑定子菜单项点击事件
      document.querySelectorAll('.admin-sidebar .sub-item').forEach(s => {
+       // 排除动态生成的（稍后单独绑定或委托），这里绑定静态的
+       if (s.parentElement.id === 'infoDirChildren') return;
+
        s.addEventListener('click', (ev) => {
          ev.stopPropagation();
-         // active highlight: clear others, set this
-         document.querySelectorAll('.admin-sidebar .sub-item').forEach(x => x.classList.remove('active'));
+
+         // 清除全局所有高亮
+         document.querySelectorAll('.nav-header, .sub-item').forEach(x => x.classList.remove('active'));
+         // 高亮自己
          s.classList.add('active');
+
          const action = s.getAttribute('data-action');
-         appendDebug('sub-item click: ' + action);
-         // ensure info panel visible and sub-nav expanded
-         const infoNav = document.querySelector('.admin-sidebar .nav-item[data-panel="info"]');
-         if (infoNav) {
-           // remove top-level active states so sub-item highlighting is independent
-           document.querySelectorAll('.admin-sidebar .nav-item').forEach(i=>i.classList.remove('active'));
-           // keep the sub-nav visually opened but DO NOT mark parent as active
-           infoNav.classList.add('open');
-         }
-         // hide all panels then show appropriate one
+         const group = s.closest('.nav-group');
+         if(group) group.classList.add('open'); // 确保父级展开
+
+         // 切换面板
          document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
+
          if (action === 'infoFiles') {
            const t = el('panel-info'); if (t) t.style.display = '';
-           appendDebug('sub loadInfoFiles /users'); loadInfoFiles('/users');
+           loadInfoFiles('/users');
          } else if (action === 'infoLogs') {
            const t = el('panel-info'); if (t) t.style.display = '';
            loadInfoLogs();
          } else if (action === 'infoAnn') {
            const t = el('panel-announce'); if (t) t.style.display = '';
-           // load announcements list into panel-announce
            loadAnnouncements();
          }
        });
-       // keyboard support: Enter or Space activates the sub-item
-       s.addEventListener('keydown', (ev) => {
-         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); s.click(); }
-       });
      });
    }
+
+   // 更新动态目录生成函数，使其生成符合新 CSS 的结构
+   function populateInfoDirContainer(items) {
+    const ul = el('infoDirChildren'); if (!ul) return;
+    ul.innerHTML = '';
+    try {
+      const dirs = getTopLevelDirsFromItems(items || []);
+      if (!dirs || dirs.length === 0) return;
+
+      dirs.forEach(d => {
+        const li = document.createElement('li');
+        // 创建子项
+        const a = document.createElement('div'); // 使用 div 保持一致性
+        a.className = 'sub-item';
+        a.setAttribute('data-action','infoDir');
+        a.setAttribute('data-path', d.path);
+        // 添加文件夹图标前缀
+        a.innerHTML = `<span style="opacity:0.7; margin-right:4px;">📁</span>${escapeHtml(d.name)}`;
+
+        a.addEventListener('click', (ev) => {
+          ev.preventDefault(); ev.stopPropagation();
+
+          // 高亮处理
+          document.querySelectorAll('.nav-header, .sub-item').forEach(x => x.classList.remove('active'));
+          a.classList.add('active');
+
+          // 确保面板显示
+          document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
+          const target = el('panel-info'); if (target) target.style.display = '';
+          loadInfoFiles(d.path);
+        });
+
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+
+      // 匹配当前路径以保持高亮
+      let matched = null;
+      Array.from(ul.querySelectorAll('.sub-item')).forEach(a => {
+           const p = a.getAttribute('data-path');
+           if (p === currentFilePath) matched = a;
+       });
+      // 如果没有精确匹配，尝试匹配父路径
+      if (!matched) {
+        Array.from(ul.querySelectorAll('.sub-item')).forEach(a => {
+             const p = a.getAttribute('data-path');
+             if (p && (currentFilePath||'/').startsWith(p) && (!matched || p.length > matched.getAttribute('data-path').length)) matched = a;
+         });
+      }
+      if (matched) {
+        // 清除其他高亮
+        document.querySelectorAll('.nav-header, .sub-item').forEach(x => x.classList.remove('active'));
+        matched.classList.add('active');
+      }
+    } catch (e) { appendDebug('populateInfoDirContainer failed: ' + e); }
+  }
 
    function bindButtons(){
      const newAnn = el('newAnnBtn'); if (newAnn) newAnn.addEventListener('click', openNewAnnModal);
@@ -318,16 +379,20 @@
      const out = el('annList'); if (!out) return;
      out.innerHTML = '';
      if (!list || list.length === 0) { out.innerHTML = '<div class="muted">暂无公告</div>'; return; }
+     const wrapper = document.createElement('div');
+     wrapper.className = 'data-table-wrapper';
      const table = document.createElement('table');
-     table.innerHTML = `<thead><tr><th>标题</th><th>发布者</th><th>时间</th><th>操作</th></tr></thead>`;
+     table.className = 'data-table';
+     table.innerHTML = `<thead><tr><th>标题</th><th>发布者</th><th>时间</th><th style="width:120px; text-align:center;">操作</th></tr></thead>`;
      const tb = document.createElement('tbody');
      list.forEach(a => {
        const tr = document.createElement('tr');
-       tr.innerHTML = `<td>${escapeHtml(a.title)}</td><td class="small">${escapeHtml(a.author||'')}</td><td class="small">${new Date(a.createdAt||0).toLocaleString()}</td><td><button class="btn" data-id="${a.id}" data-action="edit">编辑</button> <button class="btn btn-danger" data-id="${a.id}" data-action="del">删除</button></td>`;
+       tr.innerHTML = `<td>${escapeHtml(a.title)}</td><td class="text-muted">${escapeHtml(a.author||'')}</td><td class="text-muted">${new Date(a.createdAt||0).toLocaleString()}</td><td style="text-align:center;"><button class="btn btn-xs" data-id="${a.id}" data-action="edit">编辑</button> <button class="btn btn-xs btn-ghost-danger" data-id="${a.id}" data-action="del">删除</button></td>`;
        tb.appendChild(tr);
      });
      table.appendChild(tb);
-     out.appendChild(table);
+     wrapper.appendChild(table);
+     out.appendChild(wrapper);
      // wire actions
      out.querySelectorAll('button[data-action="edit"]').forEach(b => b.addEventListener('click', () => { const id = b.getAttribute('data-id'); openEditAnnModal(id); }));
      out.querySelectorAll('button[data-action="del"]').forEach(b => b.addEventListener('click', async () => { const id = b.getAttribute('data-id'); if (!confirm('确定删除此公告吗?')) return; await deleteAnn(id); }));
@@ -529,74 +594,126 @@
     try {
       const dirs = getTopLevelDirsFromItems(items || []);
       if (!dirs || dirs.length === 0) return;
+
       dirs.forEach(d => {
         const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = '#'; a.className = 'sub-item'; a.setAttribute('data-action','infoDir'); a.setAttribute('data-path', d.path);
-        a.textContent = d.name;
+        // 创建子项
+        const a = document.createElement('div'); // 使用 div 保持一致性
+        a.className = 'sub-item';
+        a.setAttribute('data-action','infoDir');
+        a.setAttribute('data-path', d.path);
+        // 添加文件夹图标前缀
+        a.innerHTML = `<span style="opacity:0.7; margin-right:4px;">📁</span>${escapeHtml(d.name)}`;
+
         a.addEventListener('click', (ev) => {
           ev.preventDefault(); ev.stopPropagation();
-          // only highlight the clicked sub-item
-          document.querySelectorAll('.admin-sidebar .sub-item').forEach(x => x.classList.remove('active'));
+
+          // 高亮处理
+          document.querySelectorAll('.nav-header, .sub-item').forEach(x => x.classList.remove('active'));
           a.classList.add('active');
-          // ensure info nav is expanded but NOT marked active
-          const infoNav = document.querySelector('.admin-sidebar .nav-item[data-panel="info"]');
-          if (infoNav) { document.querySelectorAll('.admin-sidebar .nav-item').forEach(i=>i.classList.remove('active')); infoNav.classList.add('open'); }
-          // show panel-info and load
+
+          // 确保面板显示
           document.querySelectorAll('.admin-main .panel').forEach(p => p.style.display = 'none');
           const target = el('panel-info'); if (target) target.style.display = '';
           loadInfoFiles(d.path);
         });
-        a.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); a.click(); } });
+
         li.appendChild(a);
         ul.appendChild(li);
       });
 
-      // wire toggle button to mimic main page collapse/expand
-      const toggle = el('infoDirToggle');
-      if (toggle) {
-        // ensure only one handler
-        if (!toggle.__infoDirToggleBound) {
-          toggle.addEventListener('click', () => {
-            const collapsed = ul.classList.toggle('collapsed');
-            ul.style.display = collapsed ? 'none' : '';
-            toggle.textContent = collapsed ? '▸' : '▾';
-          });
-          toggle.__infoDirToggleBound = true;
-        }
-        // determine initial state: open if currentFilePath is under any dir
-        let shouldOpen = false; const ap = currentFilePath || '/';
-        dirs.forEach(d => { if (ap.startsWith(d.path)) shouldOpen = true; });
-        if (!shouldOpen) { ul.style.display = 'none'; toggle.textContent = '▸'; ul.classList.add('collapsed'); } else { ul.style.display = ''; toggle.textContent = '▾'; ul.classList.remove('collapsed'); }
-      }
-
-      // set active based on currentFilePath (exact or closest parent)
+      // 匹配当前路径以保持高亮
       let matched = null;
-      Array.from(ul.querySelectorAll('.sub-item')).forEach(a => { const p = a.getAttribute('data-path'); if (p === currentFilePath) matched = a; });
+      Array.from(ul.querySelectorAll('.sub-item')).forEach(a => {
+           const p = a.getAttribute('data-path');
+           if (p === currentFilePath) matched = a;
+       });
+      // 如果没有精确匹配，尝试匹配父路径
       if (!matched) {
-        Array.from(ul.querySelectorAll('.sub-item')).forEach(a => { const p = a.getAttribute('data-path'); if (p && (currentFilePath||'/').startsWith(p) && (!matched || p.length > matched.getAttribute('data-path').length)) matched = a; });
+        Array.from(ul.querySelectorAll('.sub-item')).forEach(a => {
+             const p = a.getAttribute('data-path');
+             if (p && (currentFilePath||'/').startsWith(p) && (!matched || p.length > matched.getAttribute('data-path').length)) matched = a;
+         });
       }
       if (matched) {
-        document.querySelectorAll('.admin-sidebar .sub-item').forEach(x => x.classList.remove('active'));
+        // 清除其他高亮
+        document.querySelectorAll('.nav-header, .sub-item').forEach(x => x.classList.remove('active'));
         matched.classList.add('active');
-        const infoNav = document.querySelector('.admin-sidebar .nav-item[data-panel="info"]'); if (infoNav) infoNav.classList.add('open');
       }
     } catch (e) { appendDebug('populateInfoDirContainer failed: ' + e); }
   }
 
+   // --- 新增辅助函数：根据文件扩展名获取图标/颜色 ---
+   function getFileIcon(filename, isDir) {
+     if (isDir) return { icon: '📁', color: '#FFC107' }; // 文件夹
+     const ext = filename.split('.').pop().toLowerCase();
+     switch(ext) {
+       case 'jpg': case 'jpeg': case 'png': case 'gif': case 'bmp': case 'svg':
+         return { icon: '🖼️', color: '#FB8C00' }; // 图片
+       case 'mp4': case 'mkv': case 'webm': case 'avi': case 'mov':
+         return { icon: '🎬', color: '#E53935' }; // 视频
+       case 'mp3': case 'wav': case 'flac': case 'ogg':
+         return { icon: '🎵', color: '#8E24AA' }; // 音频
+       case 'zip': case 'rar': case '7z': case 'tar': case 'gz':
+         return { icon: '📦', color: '#795548' }; // 压缩包
+       case 'pdf':
+         return { icon: '📄', color: '#D32F2F' }; // PDF
+       case 'doc': case 'docx': case 'txt': case 'md':
+         return { icon: '📝', color: '#1976D2' }; // 文档
+       case 'xls': case 'xlsx': case 'csv':
+         return { icon: '📊', color: '#43A047' }; // 表格
+       case 'ppt': case 'pptx':
+         return { icon: '📉', color: '#F4511E' }; // 幻灯片
+       case 'exe': case 'msi': case 'apk': case 'app':
+         return { icon: '💿', color: '#607D8B' }; // 程序
+       case 'js': case 'html': case 'css': case 'json': case 'xml': case 'java': case 'py': case 'c': case 'cpp':
+         return { icon: '💻', color: '#0288D1' }; // 代码
+       default:
+         return { icon: '📄', color: '#9E9E9E' }; // 未知
+     }
+   }
+
+    // --- 新增辅助函数：根据日志动作获取徽章样式 ---
+   function getActionBadgeClass(action) {
+     if (!action) return 'badge-gray';
+     const act = action.toLowerCase();
+     if (act.includes('删') || act.includes('del') || act.includes('remove')) return 'badge-red';
+     if (act.includes('传') || act.includes('up') || act.includes('add') || act.includes('crea')) return 'badge-green';
+     if (act.includes('改') || act.includes('edit') || act.includes('upd')) return 'badge-blue';
+     if (act.includes('登') || act.includes('log')) return 'badge-orange';
+     return 'badge-gray';
+   }
+
+    // --- 替换 renderFilesList 函数 ---
    function renderFilesList(items){
      appendDebug('renderFilesList items=' + (items?items.length:0));
      const c = el('info-content'); if (!c) return; c.innerHTML = '';
-     if (!items || items.length === 0) { c.innerHTML = '<div class="muted">暂无文件</div>'; return; }
-     const table = document.createElement('table'); table.className = 'file-table';
-     table.innerHTML = '<thead><tr><th>路径</th><th>用户</th><th style="width:110px">大小</th><th style="width:180px">时间</th><th>操作</th></tr></thead>';
+     if (!items || items.length === 0) {
+        c.innerHTML = '<div class="muted" style="text-align:center; padding:40px;">暂无文件</div>';
+        return;
+      }
+     // 创建外层容器
+     const wrapper = document.createElement('div');
+     wrapper.className = 'data-table-wrapper';
+      const table = document.createElement('table');
+      table.className = 'data-table'; // 使用新样式类
+     table.innerHTML = `
+       <thead>
+         <tr>
+           <th>文件名/路径</th>
+           <th style="width:120px">所有者</th>
+           <th style="width:100px; text-align:right;">大小</th>
+           <th style="width:180px">修改时间</th>
+           <th style="width:100px; text-align:center;">操作</th>
+         </tr>
+       </thead>`;
      const tb = document.createElement('tbody');
-     // directories first, then files
+     // 1. 数据预处理：分离文件夹和文件
      let dirs = items.filter(i=>i.isDirectory);
      let filesOnly = items.filter(i=>i.isDirectory===false);
+     // 容错：如果没有 isDirectory 字段，根据路径判断
      const providedFlags = items.some(i=>i.hasOwnProperty('isDirectory'));
      if (!providedFlags) {
-       // infer based on currentFilePath
        const dirSet = new Set();
        const fileList = [];
        const base = (currentFilePath || '/');
@@ -604,45 +721,74 @@
        items.forEach(it => {
          const p = it.path || '';
          if (!p.startsWith(normBase)) {
-           // if item not under base, try to collect top-level entries
            const parts = p.split('/').filter(Boolean);
            if (parts.length >= 1) dirSet.add('/' + parts[0]);
          } else {
            const rel = p.substring(normBase.length);
            const parts = rel.split('/').filter(Boolean);
            if (parts.length === 0) return;
-           if (parts.length === 1) {
-             // direct child file
-             fileList.push(it);
-           } else {
-             // directory
-             dirSet.add(normBase + parts[0]);
-           }
+           if (parts.length === 1) fileList.push(it);
+           else dirSet.add(normBase + parts[0]);
          }
        });
-       dirs = Array.from(dirSet).map(d => ({ path: d, owner: '', isDirectory: true, mtime: 0 }));
+       dirs = Array.from(dirSet).map(d => ({ path: d, owner: '-', isDirectory: true, mtime: 0 }));
        filesOnly = fileList;
      }
+      // 2. 渲染文件夹行
      dirs.forEach(it=>{
        const tr = document.createElement('tr');
        const name = (it.path||'').split('/').filter(Boolean).pop();
-       tr.innerHTML = `<td><a href="#" class="dir-link" data-path="${escapeHtml(it.path||'')}">📁 ${escapeHtml(name||it.path||'')}</a></td><td class="small"><span class="owner-badge">${escapeHtml(it.owner||'')}</span></td><td class="file-size">-</td><td class="file-time">${it.mtime?new Date(it.mtime).toLocaleString():''}</td><td></td>`;
+       tr.innerHTML = `
+         <td>
+           <a href="#" class="dir-link" data-path="${escapeHtml(it.path||'')}" title="${escapeHtml(it.path)}">
+             <span class="file-icon">📁</span>
+             <span class="file-name">${escapeHtml(name||it.path||'')}</span>
+           </a>
+         </td>
+         <td><span class="badge badge-gray">目录</span></td>
+         <td style="text-align:right" class="text-muted">-</td>
+         <td class="text-muted">${it.mtime ? new Date(it.mtime).toLocaleString() : '-'}</td>
+         <td></td>
+       `;
        tb.appendChild(tr);
      });
+      // 3. 渲染文件行
      filesOnly.forEach(it=>{
        const tr = document.createElement('tr');
        const name = it.path.split('/').filter(Boolean).pop();
-       tr.innerHTML = `<td>${escapeHtml(name||it.path||'')}</td><td class="small"><span class="owner-badge">${escapeHtml(it.owner||'')}</span></td><td class="file-size">${escapeHtml(humanSize(it.size))}</td><td class="file-time">${new Date(it.mtime||0).toLocaleString()}</td><td class="file-actions"><button class="btn" data-path="${escapeHtml(it.path||'')}" data-action="delFile">删除</button></td>`;
+       const fileMeta = getFileIcon(name, false); // 获取图标
+       const ownerBadge = it.owner ? `<span class="badge badge-blue">${escapeHtml(it.owner)}</span>` : '<span class="badge badge-gray">System</span>';
+       tr.innerHTML = `
+         <td>
+           <div class="file-cell" title="${escapeHtml(it.path)}">
+             <span class="file-icon">${fileMeta.icon}</span>
+             <span class="file-name">${escapeHtml(name||it.path||'')}</span>
+           </div>
+         </td>
+         <td>${ownerBadge}</td>
+         <td style="text-align:right" class="text-mono">${escapeHtml(humanSize(it.size))}</td>
+         <td class="text-muted">${new Date(it.mtime||0).toLocaleString()}</td>
+         <td style="text-align:center;">
+           <button class="btn btn-xs btn-ghost-danger" data-path="${escapeHtml(it.path||'')}" data-action="delFile" title="删除文件">删除</button>
+         </td>
+       `;
        tb.appendChild(tr);
      });
-     table.appendChild(tb); c.appendChild(table);
-     c.querySelectorAll('button[data-action="delFile"]').forEach(b=>b.addEventListener('click', async ()=>{ if (!confirm('确定删除该文件?')) return; const p = b.getAttribute('data-path'); await adminDeleteFile(p); }));
-     // directory links
-     c.querySelectorAll('a.dir-link').forEach(a=>a.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); const p = a.getAttribute('data-path'); appendDebug('dir link click -> ' + p); if (p) loadInfoFiles(p); }));
-
-    // populate admin sidebar dynamic directory list based on items
-    try {
-      // pass the raw items to the new tree builder which will build a nested tree
+      table.appendChild(tb);
+     wrapper.appendChild(table);
+     c.appendChild(wrapper);
+      // 绑定事件
+     c.querySelectorAll('button[data-action="delFile"]').forEach(b=>b.addEventListener('click', async ()=>{
+        if (!confirm('确定删除该文件? 此操作无法撤销。')) return;
+        const p = b.getAttribute('data-path');
+        await adminDeleteFile(p);
+      }));
+     c.querySelectorAll('a.dir-link').forEach(a=>a.addEventListener('click', (ev)=>{
+        ev.preventDefault(); ev.stopPropagation();
+        const p = a.getAttribute('data-path');
+        if (p) loadInfoFiles(p);
+      }));
+     try {
       populateInfoDirContainer(items || []);
      } catch(e) { appendDebug('populateInfoDirContainer failed: ' + e); }
    }
@@ -668,30 +814,51 @@
          console.debug('admin logs endpoint 404:', e.url);
          try { showAdminBanner(e.url); } catch (ex) { console.debug('showAdminBanner failed', ex); }
        } else {
-         content.innerHTML = '<div class="muted">加载失败</div>';
+         content.innerHTML = '<div class="muted">加��失败</div>';
        }
       }
    }
 
+    // --- 替换 renderLogs 函数 ---
    function renderLogs(items){
      const c = el('info-content'); if (!c) return; c.innerHTML = '';
-     if (!items || items.length===0){ c.innerHTML = '<div class="muted">暂无日志</div>'; return; }
-     const table = document.createElement('table');
-     table.innerHTML = '<thead><tr><th>时间</th><th>用户</th><th>操作</th><th>详情</th></tr></thead>';
+     if (!items || items.length===0){
+          c.innerHTML = '<div class="muted" style="text-align:center; padding:40px;">暂无操作日志</div>';
+          return;
+      }
+     const wrapper = document.createElement('div');
+     wrapper.className = 'data-table-wrapper';
+      const table = document.createElement('table');
+     table.className = 'data-table';
+     table.innerHTML = `
+       <thead>
+         <tr>
+           <th style="width:180px">发生时间</th>
+           <th style="width:120px">操作用户</th>
+           <th style="width:100px">动作类型</th>
+           <th>详细信息</th>
+         </tr>
+       </thead>`;
      const tb = document.createElement('tbody');
      items.forEach(it=>{
-       // normalize fields from possible formats returned by backend
+       // 字段兼容处理
        const timeText = it.timeText || (typeof it.time === 'number' ? new Date(it.time).toLocaleString() : (it.raw ? it.raw.split('\t')[0] : ''));
-       const user = it.user || it['user'] || '';
-       const action = it.action || it['action'] || '';
-       const detail = it.detail || it.path || it.info || it['detail'] || '';
-       // skip rows without meaningful content
-       if (!action && !detail) return;
-       const tr = document.createElement('tr');
-       tr.innerHTML = `<td class="small">${escapeHtml(timeText||'')}</td><td class="small">${escapeHtml(user||'')}</td><td>${escapeHtml(action||'')}</td><td class="small">${escapeHtml(detail||'')}</td>`;
+       const user = it.user || it['user'] || '未知';
+       const action = it.action || it['action'] || 'Info';
+       const detail = it.detail || it.path || it.info || it['detail'] || '-';
+       if (!action && !detail) return; // 跳过空行
+        const badgeClass = getActionBadgeClass(action); // 获取颜色
+        const tr = document.createElement('tr');
+       tr.innerHTML = `
+         <td class="text-muted">${escapeHtml(timeText||'')}</td>
+         <td><span style="font-weight:500; color:#333;">${escapeHtml(user)}</span></td>
+         <td><span class="badge ${badgeClass}">${escapeHtml(action)}</span></td>
+         <td class="text-mono" style="font-size:12px; color:#555;">${escapeHtml(detail)}</td>
+       `;
        tb.appendChild(tr);
      });
-     table.appendChild(tb); c.appendChild(table);
+     table.appendChild(tb);
+      wrapper.appendChild(table);
    }
 
    function openAnnEditor(){
@@ -746,17 +913,20 @@
        }
       }
     }
-
-   function renderUsers(list){
+     function renderUsers(list){
      const out = el('userList'); if (!out) return; out.innerHTML = '';
      if (!list || list.length === 0) { out.innerHTML = '<div class="muted">暂无用户</div>'; return; }
+     const wrapper = document.createElement('div');
+     wrapper.className = 'data-table-wrapper';
      const table = document.createElement('table');
-     table.innerHTML = '<thead><tr><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead>';
+     table.className = 'data-table';
+     table.innerHTML = '<thead><tr><th>用户名</th><th>角色</th><th>创建时间</th><th style="width:150px; text-align:center;">操作</th></tr></thead>';
      const tb = document.createElement('tbody');
      list.forEach(u => {
        const tr = document.createElement('tr');
        // if username is 'root' treat it as admin for display purposes
        const uname = (u.username || '').toString();
+       const avatarUrl = u.avatar || `https://i.pravatar.cc/40?u=${encodeURIComponent(uname)}`;
       // Normalize role information from possible shapes: u.role (string) or u.roles (array/string)
       let roleHint = '';
       if (typeof u.role === 'string') roleHint = u.role;
@@ -767,10 +937,25 @@
       const isRootUser = uname && uname.toLowerCase() === 'root';
       const isRoleAdmin = ['admin','administrator','root','super'].some(k => roleLower.includes(k));
       const displayRole = (isRootUser || isRoleAdmin) ? 'admin' : (u.role || 'user');
-       tr.innerHTML = `<td>${escapeHtml(uname)}</td><td>${escapeHtml(displayRole)}</td><td class="small">${new Date(u.createdAt||0).toLocaleString()}</td><td><button class="btn" data-name="${escapeHtml(uname)}" data-action="imp">重置密码</button> <button class="btn btn-danger" data-name="${escapeHtml(uname)}" data-action="del">删除</button></td>`;
+      const roleBadge = `<span class="badge ${displayRole === 'admin' ? 'badge-red' : 'badge-blue'}">${escapeHtml(displayRole)}</span>`;
+       tr.innerHTML = `
+        <td>
+            <div class="file-cell">
+                <img src="${avatarUrl}" alt="avatar" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                <span class="file-name">${escapeHtml(uname)}</span>
+            </div>
+        </td>
+        <td>${roleBadge}</td>
+        <td class="text-muted">${new Date(u.createdAt||0).toLocaleString()}</td>
+        <td style="text-align:center;">
+            <button class="btn btn-xs" data-name="${escapeHtml(uname)}" data-action="imp">重置密码</button>
+            <button class="btn btn-xs btn-ghost-danger" data-name="${escapeHtml(uname)}" data-action="del">删除</button>
+        </td>`;
        tb.appendChild(tr);
      });
-     table.appendChild(tb); out.appendChild(table);
+     table.appendChild(tb);
+     wrapper.appendChild(table);
+     out.appendChild(wrapper);
      out.querySelectorAll('button[data-action="imp"]').forEach(b=>b.addEventListener('click', ()=>{ const n=b.getAttribute('data-name'); if (!confirm('确定重置用户 '+n+' 的密码吗?')) return; adminResetPwd(n); }));
      out.querySelectorAll('button[data-action="del"]').forEach(b=>b.addEventListener('click', ()=>{ const n=b.getAttribute('data-name'); if (!confirm('确定删除用户 '+n+' ?')) return; adminDeleteUser(n); }));
    }
@@ -835,6 +1020,97 @@
      }catch(e){ alert('删除失败: ' + (e.message || (e.code===404?('接口未实现: '+e.url):e))); }
    }
 
+   // --- 公告板视图逻辑 ---
+
+   // 加载公告数据供公告板使用 (复用 API，但使用不同的渲染器)
+   async function loadBulletinBoard(){
+     const out = el('boardList'); if (!out) return;
+     out.innerHTML = '<div class="muted">正在刷新公告...</div>';
+     try{
+       const url = base + '/api/admin/announcements';
+       const data = await fetchJson(url);
+       const list = data.items || [];
+       // 按时间倒序排序
+       list.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+       renderBulletinBoard(list);
+     }catch(e){
+       // 同样支持模拟数据 fallback
+       if (e && e.code === 404) {
+         // 如果启用了模拟，直接使用模拟数据
+         if (typeof useMockAnnouncements !== 'undefined' && useMockAnnouncements) {
+            // 确保有模拟数据 (引用全局变量 announcements)
+            if (typeof announcements !== 'undefined') {
+                renderBulletinBoard(announcements);
+                return;
+            }
+         }
+         out.innerHTML = `<div class="muted">获取公告失败或接口不存在。<br><button class="btn" onclick="loadBulletinBoard()">重试</button></div>`;
+       } else {
+         out.innerHTML = '<div class="muted">加载失败</div>';
+       }
+     }
+   }
+
+   // 渲染漂亮的公告卡片列表
+   function renderBulletinBoard(list) {
+     const out = el('boardList'); if (!out) return;
+     out.innerHTML = '';
+
+     if (!list || list.length === 0) {
+       out.innerHTML = `
+         <div style="text-align:center; padding:40px; background:#fff; border-radius:8px; border:1px dashed #ddd;">
+           <div style="font-size:40px; margin-bottom:10px;">📭</div>
+           <div class="muted">暂时没有系统公告</div>
+         </div>`;
+       return;
+     }
+
+     // 计算“最新”的时间阈值（例如 3 天内）
+     const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000);
+
+     list.forEach(item => {
+       const card = document.createElement('div');
+       card.className = 'board-card';
+
+       const timeObj = new Date(item.createdAt || Date.now());
+       const timeStr = timeObj.toLocaleString();
+       const isNew = (item.createdAt || 0) > threeDaysAgo;
+
+       const newBadgeHtml = isNew ? '<span class="board-badge-new">NEW</span>' : '';
+       const author = item.author || '系统管理员';
+
+       card.innerHTML = `
+         <div class="board-header">
+           <h3 class="board-title">
+             ${escapeHtml(item.title)}
+             ${newBadgeHtml}
+           </h3>
+           <span class="board-meta" title="${timeStr}">
+             🕒 ${formatTimeAgo(timeObj)}
+           </span>
+         </div>
+         <div class="board-content">${escapeHtml(item.content)}</div>
+         <div class="board-footer">
+           <span>👤 发布者: ${escapeHtml(author)}</span>
+           <span>📅 ${timeStr}</span>
+         </div>
+       `;
+       out.appendChild(card);
+     });
+   }
+
+   // 简单的相对时间格式化辅助函数 (例如: "2小时前")
+   function formatTimeAgo(date) {
+     const now = new Date();
+     const diff = Math.floor((now - date) / 1000); // seconds
+     if (diff < 60) return '刚刚';
+     if (diff < 3600) return Math.floor(diff/60) + '分钟前';
+     if (diff < 86400) return Math.floor(diff/3600) + '小时前';
+     if (diff < 259200) return Math.floor(diff/86400) + '天前';
+     return date.toLocaleDateString();
+   }
+
+
    // init
    document.addEventListener('DOMContentLoaded', init);
- })();
+})();

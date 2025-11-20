@@ -1,6 +1,7 @@
 package com.hdfsdrive.web.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hdfsdrive.core.LogUtil;
 import com.hdfsdrive.core.User;
 import com.hdfsdrive.core.UserDao;
 import jakarta.servlet.ServletException;
@@ -16,6 +17,8 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+
+// ...existing code...
 
 @WebServlet("/api/user")
 public class UserServlet extends HttpServlet {
@@ -167,6 +170,7 @@ public class UserServlet extends HttpServlet {
                  s.setAttribute("avatar", avatar);
                  // return avatar so client can update header with server-stored path (if changed)
                  sendJson(resp, mapOf("success", true, "avatar", avatar));
+                 LogUtil.log(getServletContext(), newUsername, "update-user-info", "用户信息已更新");
              } else {
                  sendJson(resp, mapOf("success", false, "message", "更新失败"));
              }

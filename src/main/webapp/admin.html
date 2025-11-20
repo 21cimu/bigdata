@@ -11,56 +11,183 @@
     .admin-header { background: #1976D2; color: #fff; padding:12px 20px; display:flex; align-items:center; justify-content:space-between; }
     .admin-header .title { font-size:18px; font-weight:700; }
     .admin-layout { display:flex; height:calc(100vh - 56px); }
-    .admin-sidebar { width:220px; background:#fff; border-right:1px solid #eee; padding:12px; box-sizing:border-box; }
+    /* --- 侧边栏新样式 --- */
+    .admin-sidebar { width:240px; background:#fff; border-right:1px solid #eee; padding:12px 0; box-sizing:border-box; display: flex; flex-direction: column; gap: 4px; }
+    /* 导航组容器 */
+    .nav-group { position: relative; width: 100%; }
+    /* 导航头部（一级菜单） */
+    .nav-header {          display: flex;          align-items: center;          justify-content: space-between; /* 文字左对齐，箭头右对齐 */         padding: 10px 16px;          cursor: pointer;          color: #333;         font-size: 14px;         transition: background .1s;         user-select: none;     }
+    .nav-header:hover { background-color: #f5f7fa; }
+    /* 选中状态（仅用于无子菜单的一级菜单） */
+    .nav-header.active { background:#e8f0fb; color:#0b63b8; font-weight:700; }
+    /* 箭头图标 */
+    .nav-arrow { font-size: 10px; color: #999; transition: transform 0.2s ease; display: inline-block; width: 12px; text-align: center; }
+    /* 展开状态下的箭头旋转 */
+    .nav-group.open .nav-arrow { transform: rotate(90deg); }
+    .nav-group.open .nav-header { font-weight: 600; }
+    /* 子菜单容器 */
+    .sub-nav { display: none; padding: 4px 0; }
+    .nav-group.open .sub-nav { display: block; }
+    /* 子菜单项 */
+    .sub-item { display: block; padding: 8px 16px 8px 34px; cursor: pointer; color: #555; font-size: 13px; text-decoration: none; margin: 2px 8px; border-radius: 6px; transition: all .1s; }
+    .sub-item:hover { background: #f0f2f5; color: #333; }
+    /* 子菜单选中高亮 - 独立显示 */
+    .sub-item.active { background: #e8f0fb; color: #0b63b8; font-weight: 700; }
+    /* 动态目录树生成的节点样式优化 */
+    .sidebar-sub-children { list-style: none; padding: 0; margin: 0; }
+    .sidebar-sub-children li { margin-bottom: 2px; }
+    /* 目录树 toggle 按钮微调 */
+    .toggle-btn { background: none; border: none; cursor: pointer; color: #888; font-weight: bold; padding: 0 4px; width: 24px; height: 24px; }
+
+    /* main and panel fallback styles kept from original */
     .admin-main { flex:1; padding:18px; overflow:auto; }
-    .nav-item { padding:10px 12px; border-radius:6px; cursor:pointer; color:#333; margin-bottom:6px; }
-    .nav-item { position:relative; }
-    .nav-item .sub-nav { display:none; margin-top:6px; margin-left:12px; }
-    .nav-item.open .sub-nav { display:block; }
-    .nav-item::after { content: '\25B6'; position:absolute; right:12px; transform:rotate(90deg); transition:transform .15s ease; }
-    .nav-item.open::after { transform:rotate(180deg); }
-    .nav-item.active { background:#e8f0fb; color:#0b63b8; font-weight:700; }
-    .sub-item { padding-left:6px; margin-bottom:4px; }
-    /* style for active sub-items under 信息管理 */
-    .admin-sidebar .sub-item.active { background:#e8f0fb; color:#0b63b8; font-weight:700; padding:6px 8px; border-radius:6px; }
-    .admin-sidebar .sub-item[role="button"] { cursor:pointer; }
     .panel { background:white; border-radius:8px; padding:12px; box-shadow:0 6px 18px rgba(0,0,0,0.04); }
     .toolbar { display:flex; gap:8px; margin-bottom:12px; }
     .btn { padding:8px 12px; border-radius:6px; border:0; cursor:pointer; }
     .btn-primary { background:#1976D2; color:white; }
-    .btn-danger { background:#f44336; color:white; }
-    table { width:100%; border-collapse:collapse; }
-    th, td { padding:8px 10px; border-bottom:1px solid #f0f0f0; text-align:left; }
-    th { background:#fafafa; font-weight:700; }
-    .muted { color:#888; font-size:13px; }
-    .small { font-size:13px; }
-    .form-inline { display:flex; gap:8px; align-items:center; }
-    .search { padding:8px; border:1px solid #ddd; border-radius:6px; }
-    .notice { padding:10px; border-left:4px solid #1976D2; background:#fbfdff; margin-bottom:12px; }
-    .flex { display:flex; gap:12px; align-items:center; }
-    .user-avatar { width:32px; height:32px; border-radius:6px; overflow:hidden; }
+     .btn-danger { background:#f44336; color:white; }
 
-    /* New styles for logout and improved file/user tables */
-    .header-controls { display:flex; gap:10px; align-items:center; }
-    .btn-ghost { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.18); }
-    .btn-logout { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.18); padding:6px 10px; border-radius:6px; }
+     /* --- 现代数据表格样式 --- */
+     .data-table-wrapper {
+       border: 1px solid #e0e0e0;
+       border-radius: 8px;
+       overflow: hidden; /* 保持圆角 */
+       background: #fff;
+     }
+     .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+        font-size: 14px;
+     }
+     .data-table th {
+        background: #f8f9fa;
+        color: #5f6368;
+        font-weight: 600;
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+       white-space: nowrap;
+     }
+     .data-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        color: #3c4043;
+        vertical-align: middle;
+       transition: background-color 0.15s ease;
+     }
+     .data-table tr:last-child td { border-bottom: none; }
+     .data-table tr:hover td { background-color: #f8faff; }
 
-    /* file list improvements */
-    .file-table th, .file-table td { padding:12px 10px; }
-    .file-table td .owner-badge { display:inline-block; background:#eef6ff; color:#0b63b8; padding:4px 8px; border-radius:6px; font-size:12px; }
-    .dir-link { color:#0b63b8; text-decoration:none; font-weight:600; }
-    .dir-link:hover { text-decoration:underline; }
-    .file-actions .btn { margin-right:6px; }
-    .file-size { color:#666; font-size:13px; }
-    .file-time { color:#999; font-size:12px; }
+      /* --- 列表特定元素样式 --- */
+     /* 文件名单元格：Flex布局让图标和文字对齐 */
+     .file-cell { display: flex; align-items: center; gap: 12px; }
+     .file-icon { font-size: 20px; width: 24px; text-align: center; flex-shrink: 0; }
+     .file-name { font-weight: 500; color: #202124; overflow: hidden; text-overflow: ellipsis; }
+     /* 文件夹链接 */
+     a.dir-link {
+        color: #202124;
+        text-decoration: none;
+        font-weight: 600;
+       display: flex; align-items: center; gap: 12px;
+     }
+     a.dir-link:hover { color: #1976D2; }
+     a.dir-link .file-icon { color: #FFC107; /* 文件夹黄色 */ }
 
-    /* styles for admin directory tree generated by admin.js */
-    .dir-node { display:flex; align-items:center; gap:6px; padding:4px 6px; cursor:default; }
-    .dir-node .dir-toggle { width:18px; display:inline-block; text-align:center; margin-right:6px; color:#666; }
-    .dir-node .sub-item { flex:1; padding:6px 8px; border-radius:6px; cursor:pointer; }
-    .dir-node.open .dir-toggle { font-weight:700; }
-    .dir-children { padding-left:18px; }
-    .dir-node:hover .sub-item { background:#fafafa; }
+      /* 通用徽章 (Badge) */
+     .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.5;
+     }
+     /* 徽章颜色变体 */
+     .badge-gray   { background-color: #f1f3f4; color: #5f6368; border: 1px solid #dadce0; }
+     .badge-blue   { background-color: #e8f0fe; color: #1967d2; border: 1px solid #d2e3fc; }
+     .badge-green  { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+     .badge-red    { background-color: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+     .badge-orange { background-color: #fef7e0; color: #ea8600; border: 1px solid #feefc3; }
+
+      /* 辅助文字 */
+     .text-muted { color: #70757a; font-size: 13px; }
+     .text-mono { font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 13px; }
+
+      /* 按钮微调 */
+     .btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 4px; }
+     .btn-ghost-danger { background: transparent; color: #d93025; border: 1px solid rgba(217,48,37,0.3); }
+     .btn-ghost-danger:hover { background: #fce8e6; border-color: #d93025; }
+
+    /* --- 公告板样式 --- */
+    .board-container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 900px; /* 限制宽度以提升阅读体验 */
+    }
+    .board-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+      border: 1px solid #eee;
+      border-left: 4px solid #1976D2; /* 左侧装饰线 */
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+    .board-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+    }
+    .board-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .board-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .board-badge-new {
+      background: #ff4757;
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: normal;
+      vertical-align: middle;
+    }
+    .board-meta {
+      font-size: 12px;
+      color: #999;
+      background: #f8f9fa;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+    .board-content {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.7;
+      white-space: pre-wrap; /* 保留换行符 */
+    }
+    .board-footer {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #f5f5f5;
+      font-size: 12px;
+      color: #aaa;
+      display: flex;
+      gap: 10px;
+    }
 
     @media (max-width:800px) { .admin-sidebar { display:none; } .admin-layout { height:auto; } }
   </style>
@@ -76,20 +203,46 @@
 
   <div class="admin-layout">
     <aside class="admin-sidebar">
-      <!-- 将 公告 管理 移入 信息管理 子目录 -->
-      <div class="nav-item open active" data-panel="info">
-        信息管理
-        <div class="sub-nav" style="margin-top:8px;">
-          <!-- static action items -->
-          <div class="sub-item" data-action="infoFiles" role="button" tabindex="0">用户文件</div>
-          <div class="sub-item" data-action="infoLogs" role="button" tabindex="0">操作日志</div>
-          <div class="sub-item" data-action="infoAnn" role="button" tabindex="0">公告管理</div>
+      <!-- 组1：信息管理 (包含子菜单) -->
+      <div class="nav-group" data-panel="board">
+        <div class="nav-header">
+          <span>📢 公告板</span>
         </div>
       </div>
-      <div class="nav-item" data-panel="users">用户管理</div>
+      <!-- 组1：信息管理 (包含子菜单) -->
+      <div class="nav-group open" data-panel="info">
+        <div class="nav-header">
+          <span>信息管理</span>
+          <span class="nav-arrow">▶</span>
+        </div>
+        <div class="sub-nav">
+          <!-- 静态子项 -->
+          <div class="sub-item active" data-action="infoFiles" role="button">用户文件</div>
+          <div class="sub-item" data-action="infoLogs" role="button">操作日志</div>
+          <div class="sub-item" data-action="infoAnn" role="button">公告管理</div>
+          <!-- 动态目录树容器 -->
+          <ul id="infoDirChildren" class="sidebar-sub-children" style="margin-top:4px; border-top:1px solid #eee; padding-top:4px;"></ul>
+        </div>
+      </div>
+      <!-- 组2：用户管理 (无子菜单) -->
+      <div class="nav-group" data-panel="users">
+        <div class="nav-header">
+          <span>用户管理</span>
+        </div>
+      </div>
     </aside>
 
     <main class="admin-main">
+      <!-- 新增：公告板面板 -->
+      <div id="panel-board" class="panel" style="display:none; background:transparent; box-shadow:none; padding:0;">
+        <div style="margin-bottom:16px;">
+          <h2 style="font-size:20px; margin:0 0 8px 0; color:#333;">系统公告</h2>
+          <div class="muted">查看系统发布的最新通知与动态</div>
+        </div>
+        <div id="boardList" class="board-container">
+          <!-- JS ��在此处渲染公告卡片 -->
+        </div>
+      </div>
       <div id="panel-announce" class="panel" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
           <div style="font-weight:700;">公告管理</div>
@@ -113,16 +266,7 @@
         </div>
         <div style="margin-bottom:8px;"><nav id="info-breadcrumb" aria-label="breadcrumb" style="font-size:13px; color:#555;"></nav></div>
         <div id="info-content">
-          <!-- dynamic directory list (populated by admin.js based on current files) - adopt main page structure -->
-          <ul class="sidebar-sub">
-            <li>
-              <div class="sidebar-item-with-toggle">
-                <a href="javascript:void(0)" id="infoDirRoot">目录</a>
-                <button id="infoDirToggle" class="toggle-btn" aria-label="Toggle">▾</button>
-              </div>
-              <ul id="infoDirChildren" class="sidebar-sub-children"></ul>
-            </li>
-          </ul>
+          <!-- 动态内容由 admin.js 渲染，侧边栏中的目录树位于侧边栏（#infoDirChildren） -->
         </div>
       </div>
 
@@ -150,6 +294,11 @@
       </div>
     </div>
   </div>
+
+  <!-- notify assets (styles + flatNotify + wrapper) -->
+  <link rel="stylesheet" href="notify/style.css">
+  <script src="notify/script.js"></script>
+  <script src="js/notify.js"></script>
 
   <script src="js/admin.js"></script>
 </body>

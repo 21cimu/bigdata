@@ -1,6 +1,7 @@
 package com.hdfsdrive.web.share;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hdfsdrive.core.LogUtil;
 import com.hdfsdrive.core.ShareService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -89,7 +90,7 @@ public class ShareServlet extends HttpServlet {
             out.put("link", origin + link);
             sendJson(resp, out);
             // admin log
-            appendAdminLog(req, "share-create", path, "id=" + e.id + (name != null ? ", name=" + name : ""));
+            LogUtil.log(getServletContext(), getSessionUsername(req), "share-create", path, "id=" + e.id + (name != null ? ", name=" + name : ""));
         } catch (Exception e) {
             sendError(resp, "Create share failed: " + e.getMessage());
         }
@@ -103,31 +104,21 @@ public class ShareServlet extends HttpServlet {
             Map<String,Object> out = new HashMap<>();
             out.put("success", ok);
             sendJson(resp, out);
-            appendAdminLog(req, "share-remove", id, ok ? "成功" : "失败");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "share-remove", id, ok ? "成功" : "失败");
         } catch (Exception e) {
             sendError(resp, "Remove failed: " + e.getMessage());
         }
     }
 
-    // Append an admin operation log entry under WEB-INF/logs/admin-operations.log
-    private void appendAdminLog(HttpServletRequest req, String action, String path, String extra) {
-        try {
-            String logsDir = getServletContext().getRealPath("/WEB-INF/logs");
-            if (logsDir == null) return;
-            java.io.File dir = new java.io.File(logsDir);
-            if (!dir.exists()) dir.mkdirs();
-            java.io.File f = new java.io.File(dir, "admin-operations.log");
-            String user = null;
-            try {
-                HttpSession s = req.getSession(false);
-                if (s != null && s.getAttribute("username") != null) user = String.valueOf(s.getAttribute("username"));
-            } catch (Throwable ignore) {}
-            String ts = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
-            String line = String.format("%s\tuser=%s\taction=%s\tpath=%s\tinfo=%s\n", ts, user == null ? "(anon)" : user, action, path == null ? "(none)" : path, extra == null ? "" : extra.replace('\n',' '));
-            try (java.io.FileWriter fw = new java.io.FileWriter(f, true); java.io.PrintWriter pw = new java.io.PrintWriter(fw)) {
-                pw.print(line);
+    private String getSessionUsername(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session != null) {
+            Object user = session.getAttribute("username");
+            if (user != null) {
+                return user.toString();
             }
-        } catch (Throwable ignore) {}
+        }
+        return null;
     }
 
     private void sendJson(HttpServletResponse resp, Object data) throws IOException {

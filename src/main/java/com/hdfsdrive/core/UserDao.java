@@ -239,6 +239,7 @@ public class UserDao {
                             ts = null;
                         }
                         m.put("createdAt", ts == null ? 0 : ts.getTime());
+                        m.put("avatar", rs.getString("avatar"));
                         out.add(m);
                     }
                 }
@@ -256,6 +257,7 @@ public class UserDao {
                                 m.put("email", "");
                                 String uname = rs2.getString("username");
                                 m.put("role", "admin".equalsIgnoreCase(uname) ? "admin" : "user");
+                                m.put("avatar", rs2.getString("avatar"));
                                 m.put("createdAt", 0);
                                 out.add(m);
                             }

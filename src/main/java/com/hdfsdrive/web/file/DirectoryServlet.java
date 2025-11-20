@@ -1,6 +1,7 @@
 package com.hdfsdrive.web.file;
 
 import com.hdfsdrive.core.HdfsService;
+import com.hdfsdrive.core.LogUtil;
 import com.hdfsdrive.core.TrashService;
 import com.hdfsdrive.web.common.AbstractHdfsServlet;
 import jakarta.servlet.ServletException;
@@ -435,7 +436,7 @@ public class DirectoryServlet extends AbstractHdfsServlet {
              sendJson(resp, response);
 
              // admin log
-             appendAdminLog(req, "mkdir", actualPath, created ? "成功" : "失败");
+             LogUtil.log(getServletContext(), getSessionUsername(req), "create-dir", actualPath, created ? "成功" : "失败");
 
         } catch (Exception e) {
             sendError(resp, "Failed to create directory: " + e.getMessage());
@@ -468,7 +469,7 @@ public class DirectoryServlet extends AbstractHdfsServlet {
                 response.put("success", deleted);
                 response.put("message", deleted ? "Directory permanently deleted" : "Directory not found");
                 sendJson(resp, response);
-                appendAdminLog(req, "delete-permanent", actualPath, deleted ? "成功" : "失败");
+                LogUtil.log(getServletContext(), getSessionUsername(req), "delete-permanent", actualPath, deleted ? "成功" : "失败");
             } else {
                 // UI-only trash
                 boolean isDir = false;
@@ -482,7 +483,7 @@ public class DirectoryServlet extends AbstractHdfsServlet {
                 response.put("success", true);
                 response.put("message", "Moved to trash (UI)");
                 sendJson(resp, response);
-                appendAdminLog(req, "delete-to-trash", actualPath, "已移至回收站");
+                LogUtil.log(getServletContext(), getSessionUsername(req), "delete-to-trash", actualPath, "已移至回收站");
             }
 
         } catch (Exception e) {
@@ -514,7 +515,7 @@ public class DirectoryServlet extends AbstractHdfsServlet {
             response.put("success", removed);
             response.put("message", removed ? "Restored successfully (UI)" : "Item not found in trash metadata");
             sendJson(resp, response);
-            appendAdminLog(req, "restore", actualPath, removed ? "成功" : "失败");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "restore", actualPath, removed ? "成功" : "失败");
         } catch (Exception e) {
             sendError(resp, "Restore failed: " + e.getMessage());
         }

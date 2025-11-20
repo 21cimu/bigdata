@@ -23,19 +23,39 @@
     },
     init: function() {
       // resolve wrapper each time init is called, so that document.body is not null
-      var wrapper = this.options.wrapper || document.body || document.documentElement;
+      var wrapper = this.options.wrapper;
+      // prefer an explicitly provided wrapper, else try body, else documentElement
+      if (!wrapper) wrapper = (typeof document !== 'undefined' && (document.body || document.documentElement)) || null;
+      // if still not available, create a temporary container and attach to documentElement if possible
       if (!wrapper) {
-        return;
+        try {
+          wrapper = document.createElement('div');
+          if (document && document.documentElement && typeof document.documentElement.appendChild === 'function') {
+            document.documentElement.appendChild(wrapper);
+          }
+        } catch (e) {
+          // give up if DOM truly not available
+          return;
+        }
       }
       this.options.wrapper = wrapper;
 
       this.ntf = document.createElement('div');
       this.ntf.className = 'f-notification';
-      var strinner = '<div class="f-notification-inner"></div><div class="f-close">x</div></div>';
+      var strinner = '<div class="f-notification-inner"></div><div class="f-close">x</div>';
       this.ntf.innerHTML = strinner;
 
-      // append to body or the element specified in options.wrapper
-      this.options.wrapper.insertBefore(this.ntf, this.options.wrapper.lastChild);
+      // Prefer insertBefore when lastChild exists, otherwise appendChild (safer when wrapper is document.body/documentElement)
+      try {
+        if (typeof wrapper.insertBefore === 'function' && wrapper.lastChild) {
+          wrapper.insertBefore(this.ntf, wrapper.lastChild);
+        } else if (typeof wrapper.appendChild === 'function') {
+          wrapper.appendChild(this.ntf);
+        }
+      } catch (e) {
+        // last-resort append to documentElement if available
+        try { (document && document.documentElement && document.documentElement.appendChild(this.ntf)); } catch (ex) { /* ignore */ }
+      }
 
       // init events
       this.initEvents();
@@ -51,15 +71,27 @@
       var self = this;
       clearTimeout(this.dismissttl);
 
-      classie.remove(self.ntf, 'f-show');
-      setTimeout(function() {
-        classie.add(self.ntf, 'f-hide');
-      }, 25);
+      try {
+        classie.remove(self.ntf, 'f-show');
+        setTimeout(function() {
+          classie.add(self.ntf, 'f-hide');
+        }, 25);
 
-      setTimeout(function() {
-        self.options.wrapper.removeChild( self.ntf );
-      }, 500);
-      
+        setTimeout(function() {
+          try {
+            var w = self.options && self.options.wrapper;
+            if (w && typeof w.removeChild === 'function' && w.contains && w.contains(self.ntf)) {
+              w.removeChild(self.ntf);
+            } else if (self.ntf && self.ntf.parentNode && typeof self.ntf.parentNode.removeChild === 'function') {
+              self.ntf.parentNode.removeChild(self.ntf);
+            }
+          } catch (e) { /* ignore */ }
+        }, 500);
+      } catch (e) {
+        // ensure no exception bubbles
+        try { if (self.ntf && self.ntf.parentNode) self.ntf.parentNode.removeChild(self.ntf); } catch (ex) {}
+      }
+
     },
     setType: function(newType) {
       var self = this;

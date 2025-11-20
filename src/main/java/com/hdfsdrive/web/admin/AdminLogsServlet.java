@@ -23,6 +23,7 @@ public class AdminLogsServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         // Attempt to read WEB-INF/logs/admin-operations.log
         List<Map<String,Object>> out = new ArrayList<>();
+        boolean loadedFromFile = false;
         try {
             String logsDir = getServletContext().getRealPath("/WEB-INF/logs");
             if (logsDir != null) {
@@ -38,7 +39,14 @@ public class AdminLogsServlet extends HttpServlet {
                             try {
                                 m.put("raw", line);
                                 // parse timestamp
-                                if (parts.length > 0) m.put("timeText", parts[0]);
+                                if (parts.length > 0) {
+                                    m.put("timeText", parts[0]);
+                                    try {
+                                        m.put("time", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(parts[0]).getTime());
+                                    } catch (java.text.ParseException e) {
+                                        // if parsing fails, this log entry might not be sorted correctly
+                                    }
+                                }
                                 for (int i = 1; i < parts.length; i++) {
                                     String p = parts[i];
                                     int eq = p.indexOf('=');
@@ -54,11 +62,25 @@ public class AdminLogsServlet extends HttpServlet {
                             } catch (Exception ignore) {}
                         }
                     }
+                    loadedFromFile = true;
                 }
             }
         } catch (Throwable t) {
             // ignore and fall back to default mock
         }
+
+        if (!loadedFromFile) {
+            out.addAll(logs);
+        }
+
+        // Sort logs by time descending, gracefully handling missing time field
+        out.sort((a, b) -> {
+            Object timeAObj = a.get("time");
+            Object timeBObj = b.get("time");
+            long timeA = (timeAObj instanceof Long) ? (Long) timeAObj : 0;
+            long timeB = (timeBObj instanceof Long) ? (Long) timeBObj : 0;
+            return Long.compare(timeB, timeA);
+        });
 
         sendJson(resp, mapOf("items", out));
     }

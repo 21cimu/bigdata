@@ -1,6 +1,7 @@
 package com.hdfsdrive.web.file;
 
 import com.hdfsdrive.core.HdfsService;
+import com.hdfsdrive.core.LogUtil;
 import com.hdfsdrive.core.TrashService;
 import com.hdfsdrive.web.common.AbstractHdfsServlet;
 import jakarta.servlet.ServletException;
@@ -116,7 +117,7 @@ public class FileServlet extends AbstractHdfsServlet {
             sendJson(resp, response);
 
             // log admin action
-            appendAdminLog(req, "move", actualSrc + " -> " + actualDst, ok ? "成功" : "失败");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "move", actualSrc + " -> " + actualDst, ok ? "成功" : "失败");
         } catch (Exception e) {
             sendError(resp, "Move failed: " + e.getMessage());
         }
@@ -165,7 +166,7 @@ public class FileServlet extends AbstractHdfsServlet {
             sendJson(resp, response);
 
             // log admin action
-            appendAdminLog(req, "copy", actualSrc + " -> " + actualDst, ok ? "成功" : "失败");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "copy", actualSrc + " -> " + actualDst, ok ? "成功" : "失败");
         } catch (Exception e) {
             sendError(resp, "Copy failed: " + e.getMessage());
         }
@@ -198,7 +199,7 @@ public class FileServlet extends AbstractHdfsServlet {
             sendJson(resp, response);
 
             // log admin action
-            appendAdminLog(req, "restore", actualPath, removed ? "成功" : "失败");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "restore", actualPath, removed ? "成功" : "失败");
         } catch (Exception e) {
             sendError(resp, "Restore failed: " + e.getMessage());
         }
@@ -251,6 +252,7 @@ public class FileServlet extends AbstractHdfsServlet {
                 response.put("success", true);
                 response.put("message", "保存成功");
                 sendJson(resp, response);
+                LogUtil.log(getServletContext(), getSessionUsername(req), "save-file", actualPath, "成功");
                 return;
             } catch (Exception e) {
                 // If save failed due to permission, attempt admin fallback: write as admin then chown to session user
@@ -276,6 +278,7 @@ public class FileServlet extends AbstractHdfsServlet {
                     response.put("success", true);
                     response.put("message", "保存成功（通过管理员回退）");
                     sendJson(resp, response);
+                    LogUtil.log(getServletContext(), getSessionUsername(req), "save-file", actualPath, "成功 (admin fallback)");
                     return;
                 }
                 sendError(resp, "保存失败: " + e.getMessage());
@@ -388,7 +391,7 @@ public class FileServlet extends AbstractHdfsServlet {
             sendJson(resp, response);
 
             // log admin action
-            appendAdminLog(req, "upload", targetPath, "成功");
+            LogUtil.log(getServletContext(), getSessionUsername(req), "upload", targetPath, "成功");
         } catch (Exception e) {
             sendError(resp, "Upload failed: " + e.getMessage());
         }
@@ -512,6 +515,7 @@ public class FileServlet extends AbstractHdfsServlet {
 
             // Send JSON response
             sendJson(resp, response);
+            LogUtil.log(getServletContext(), getSessionUsername(req), "delete-file", actualPath, "成功");
 
         } catch (Exception e) {
             sendError(resp, "删除失败: " + e.getMessage());

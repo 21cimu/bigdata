@@ -859,6 +859,8 @@
      });
      table.appendChild(tb);
       wrapper.appendChild(table);
+     // 将组装好的表格插入容器，否则界面不会显示任何日志
+     c.appendChild(wrapper);
    }
 
    function openAnnEditor(){

@@ -49,7 +49,7 @@
       const toggleMockBtn = document.createElement('button'); toggleMockBtn.className='btn btn-primary'; toggleMockBtn.style.marginLeft='8px';
       // 文本根据当前 localStorage 状态显示
       const stored = localStorage.getItem('admin.useMock');
-      const isMock = stored === null ? true : (stored === 'true');
+      const isMock = stored === null ? false : (stored === 'true');
       toggleMockBtn.textContent = isMock ? '关闭模拟数据' : '启用模拟数据';
       actions.appendChild(retryBtn); actions.appendChild(toggleMockBtn);
       banner.appendChild(actions);
@@ -78,7 +78,7 @@
      await loadCurrentUser();
      // 根据 localStorage 决定是否启用本地模拟数据（默认启用）
      const stored = localStorage.getItem('admin.useMock');
-     const useMockDefault = stored === null ? true : (stored === 'true');
+     const useMockDefault = stored === null ? false : (stored === 'true');
      useMockAnnouncements = useMockDefault; useMockUsers = useMockDefault; useMockFiles = useMockDefault; useMockLogs = useMockDefault;
      if (useMockDefault) {
        enableMockAnnouncements(); enableMockUsers(); enableMockFiles(); enableMockLogs();
@@ -354,8 +354,12 @@
      try{
        const url = base + '/api/admin/announcements';
        const data = await fetchJson(url);
+       // ?????????????????????????
+       useMockAnnouncements = false;
+       try { localStorage.setItem('admin.useMock', 'false'); } catch(e) {}
        announcements = data.items || [];
        renderAnnouncements(announcements);
+       renderBulletinBoard(announcements);
      }catch(e){
        if (e && e.code === 404) {
          const out = el('annList'); if (out) {
@@ -431,6 +435,7 @@
          const id = (announcements.reduce((m,a)=>Math.max(m,a.id||0),0) || 0) + 1;
          announcements.unshift(Object.assign({ id, author: '管理员', createdAt: Date.now() }, payload));
          renderAnnouncements(announcements);
+         renderBulletinBoard(announcements);
        } else {
          await fetchJson(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
          await loadAnnouncements();
@@ -442,7 +447,7 @@
        const url = base + '/api/admin/announcements/' + encodeURIComponent(id);
        if (useMockAnnouncements) {
          const idx = announcements.findIndex(a=>String(a.id)===String(id));
-         if (idx !== -1) { announcements[idx] = Object.assign({}, announcements[idx], payload); renderAnnouncements(announcements); }
+         if (idx !== -1) { announcements[idx] = Object.assign({}, announcements[idx], payload); renderAnnouncements(announcements); renderBulletinBoard(announcements); }
        } else {
          await fetchJson(url, { method: 'PUT', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
          await loadAnnouncements();
@@ -454,6 +459,7 @@
        const url = base + '/api/admin/announcements/' + encodeURIComponent(id);
        if (useMockAnnouncements) {
          announcements = announcements.filter(a=>String(a.id)!==String(id)); renderAnnouncements(announcements);
+         renderBulletinBoard(announcements);
        } else {
          await fetchJson(url, { method: 'DELETE' });
          await loadAnnouncements();
@@ -472,6 +478,7 @@
    // load files under a given directory path (defaults to /users)
    async function loadInfoFiles(path){
      currentInfoView = 'files';
+     setInfoBreadcrumbVisible(true);
      const now = Date.now();
      const targetPath = (path && path.trim() !== '') ? path : currentFilePath || '/users';
      // dedupe: if requesting same path within 500ms, ignore
@@ -531,13 +538,19 @@
        });
        bc.appendChild(a);
        if (idx < parts.length-1) {
-         const sep = document.createElement('span'); sep.textContent = '/'; sep.style.marginRight='8px'; bc.appendChild(sep);
-       }
-     });
-   }
+        const sep = document.createElement('span'); sep.textContent = '/'; sep.style.marginRight='8px'; bc.appendChild(sep);
+      }
+    });
+  }
 
-   // Build a nested directory tree from a flat items list.
-   function buildDirTreeFromItems(items, basePath) {
+  function setInfoBreadcrumbVisible(show){
+    const bc = el('info-breadcrumb'); if (!bc) return;
+    bc.style.display = show ? '' : 'none';
+    if (!show) bc.innerHTML = '';
+  }
+
+  // Build a nested directory tree from a flat items list.
+  function buildDirTreeFromItems(items, basePath) {
      const base = (basePath || currentFilePath || '/');
      const normBase = base === '/' ? '/' : (base.endsWith('/') ? base : base + '/');
      // root node representing the base path
@@ -802,6 +815,7 @@
 
    async function loadInfoLogs(){
      currentInfoView = 'logs';
+     setInfoBreadcrumbVisible(false);
      const content = el('info-content'); if (!content) return; content.innerHTML = '<div class="muted">正在加载操作日志...</div>';
      try{
        const url = base + '/api/admin/logs';
@@ -1067,18 +1081,18 @@
        return;
      }
 
-     // 计算“最新”的时间阈值（例如 3 天内）
-     const threeDaysAgo = Date.now() - (3 * 24 * 60 * 60 * 1000);
+    // 仅为最新的一条展示 NEW，其他公告不再保留历史 NEW
+    const latestCreated = list.length > 0 ? (list[0].createdAt || 0) : 0;
 
-     list.forEach(item => {
-       const card = document.createElement('div');
-       card.className = 'board-card';
+    list.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'board-card';
 
-       const timeObj = new Date(item.createdAt || Date.now());
-       const timeStr = timeObj.toLocaleString();
-       const isNew = (item.createdAt || 0) > threeDaysAgo;
+      const timeObj = new Date(item.createdAt || Date.now());
+      const timeStr = timeObj.toLocaleString();
+      const isNew = idx === 0 && (item.createdAt || 0) >= latestCreated;
 
-       const newBadgeHtml = isNew ? '<span class="board-badge-new">NEW</span>' : '';
+      const newBadgeHtml = isNew ? '<span class="board-badge-new">NEW</span>' : '';
        const author = item.author || '系统管理员';
 
        card.innerHTML = `

@@ -2,11 +2,13 @@ package com.hdfsdrive.web.admin;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hdfsdrive.core.UserDao;
+import com.hdfsdrive.core.HdfsService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.hadoop.conf.Configuration;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -15,6 +17,9 @@ import java.util.*;
 @WebServlet(urlPatterns = {"/api/admin/users","/api/admin/users/*"})
 public class AdminUsersServlet extends HttpServlet {
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final String HDFS_URI = "hdfs://node1:8020";
+    private static final String HDFS_ADMIN_USER = "root";
+    private static final String USER_ROOT = "/users";
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -66,6 +71,7 @@ public class AdminUsersServlet extends HttpServlet {
             String username = String.valueOf(body.getOrDefault("username", ""));
             String password = String.valueOf(body.getOrDefault("password", ""));
             String email = String.valueOf(body.getOrDefault("email", ""));
+            String phone = String.valueOf(body.getOrDefault("phone", ""));
             String role = String.valueOf(body.getOrDefault("role", "user"));
             if (username == null || username.trim().isEmpty() || password == null || password.trim().isEmpty()) {
                 sendJson(resp, mapOf("success", false, "message", "用户名和密码为必填"));
@@ -80,7 +86,7 @@ public class AdminUsersServlet extends HttpServlet {
                     if (ca instanceof Number) createdAt = ((Number) ca).longValue();
                     else if (ca instanceof String) createdAt = Long.parseLong((String) ca);
                 } catch (Exception ignore) { createdAt = null; }
-                ok = UserDao.createUser(username, password, createdAt);
+                ok = UserDao.createUser(username, password, email, phone, createdAt);
             } catch (SQLException se) {
                 sendJson(resp, mapOf("success", false, "message", "创建用户失败: " + se.getMessage()));
                 return;
@@ -109,7 +115,25 @@ public class AdminUsersServlet extends HttpServlet {
         }
         try {
             boolean removed = UserDao.deleteUserByUsername(username);
-            sendJson(resp, mapOf("success", removed));
+            boolean hdfsDeleted = false;
+            String hdfsMessage = null;
+            if (removed) {
+                String userDir = USER_ROOT + "/" + username;
+                try (HdfsService hs = new HdfsService(HDFS_URI, HDFS_ADMIN_USER, new Configuration())) {
+                    if (hs.exists(userDir)) {
+                        hdfsDeleted = hs.delete(userDir, true);
+                    } else {
+                        hdfsDeleted = true; // treat missing dir as already removed
+                    }
+                } catch (Exception ex) {
+                    hdfsMessage = "删除HDFS目录失败: " + ex.getMessage();
+                }
+            }
+            Map<String,Object> out = new HashMap<>();
+            out.put("success", removed && hdfsDeleted);
+            out.put("hdfsDeleted", removed && hdfsDeleted);
+            if (hdfsMessage != null) out.put("message", hdfsMessage);
+            sendJson(resp, out);
         } catch (SQLException e) {
             sendJson(resp, mapOf("success", false, "message", "删除用户失败: " + e.getMessage()));
         }

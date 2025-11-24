@@ -459,6 +459,7 @@ class CloudDrive {
         const restoreSelectedBtn = document.getElementById('restoreSelectedBtn');
         const shareBtn = document.getElementById('shareBtn');
         const cancelShareBtn = document.getElementById('cancelShareBtn');
+        const moveBtn = document.getElementById('moveBtn');
 
         if (this.currentView === 'trash') {
             if (uploadBtn) uploadBtn.style.display = 'none';
@@ -474,6 +475,7 @@ class CloudDrive {
             if (deleteBtn) deleteBtn.textContent = '永久删除';
             if (shareBtn) shareBtn.style.display = 'none';
             if (cancelShareBtn) cancelShareBtn.style.display = 'none';
+            if (moveBtn) moveBtn.style.display = 'none';
         } else if (this.currentView === 'share') {
             // In share view: hide file/directory actions and show share-related actions
             if (uploadBtn) uploadBtn.style.display = 'none';
@@ -489,6 +491,7 @@ class CloudDrive {
             if (deleteBtn2) deleteBtn2.style.display = 'none';
             if (shareBtn) shareBtn.style.display = 'none';
             if (cancelShareBtn) cancelShareBtn.style.display = '';
+            if (moveBtn) moveBtn.style.display = 'none';
         } else {
             if (uploadBtn) uploadBtn.style.display = '';
             if (newFolderBtn) newFolderBtn.style.display = '';
@@ -501,6 +504,7 @@ class CloudDrive {
             if (deleteBtn) deleteBtn.textContent = '删除';
             if (shareBtn) shareBtn.style.display = '';
             if (cancelShareBtn) cancelShareBtn.style.display = 'none';
+            if (moveBtn) { moveBtn.style.display = ''; moveBtn.disabled = (this.selectedItems.size === 0); }
         }
     }
 
@@ -557,18 +561,20 @@ class CloudDrive {
         if (!bc) return;
         bc.innerHTML = '';
         if (this.currentView === 'share') {
-            const span = document.createElement('span');
+            const span = document.createElement('button');
+            span.type = 'button';
             span.className = 'breadcrumb-item';
             span.textContent = '分享';
+            span.setAttribute('data-path', '/share');
             bc.appendChild(span);
             return;
         }
         // render path segments, home as 我的云盘
-        const home = document.createElement('span');
+        const home = document.createElement('button');
+        home.type = 'button';
         home.className = 'breadcrumb-item';
         home.setAttribute('data-path', '/');
         home.innerHTML = '<span class="icon">🏠</span> 我的云盘';
-        home.addEventListener('click', () => { this.loadDirectory('/'); });
         bc.appendChild(home);
 
         if (!path || path === '/' ) return;
@@ -576,12 +582,11 @@ class CloudDrive {
         let accum = '';
         parts.forEach((p) => {
              accum += '/' + p;
-             const item = document.createElement('span');
+             const item = document.createElement('button');
+             item.type = 'button';
              item.className = 'breadcrumb-item';
              item.setAttribute('data-path', accum);
              item.textContent = p;
-             item.style.cursor = 'pointer';
-             item.addEventListener('click', () => { this.loadDirectory(accum); });
              bc.appendChild(item);
          });
     }
@@ -616,6 +621,27 @@ class CloudDrive {
         if (deleteBtnEl) deleteBtnEl.addEventListener('click', () => {
             this.deleteSelected();
         });
+
+        // Move button
+        const moveBtnEl = document.getElementById('moveBtn');
+        if (moveBtnEl) moveBtnEl.addEventListener('click', () => {
+            this.moveSelected();
+        });
+
+        // Breadcrumb click (delegate)
+        const breadcrumbEl = document.getElementById('breadcrumb');
+        if (breadcrumbEl) {
+            breadcrumbEl.addEventListener('click', (ev) => {
+                const item = ev.target.closest('.breadcrumb-item');
+                if (!item) return;
+                const p = item.getAttribute('data-path');
+                if (p) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    this.loadDirectory(p);
+                }
+            });
+        }
 
         // Refresh button
         const refreshBtnEl = document.getElementById('refreshBtn');
@@ -1074,6 +1100,207 @@ class CloudDrive {
         } finally {
             this.hideLoading();
         }
+    }
+
+    // Batch move selected items to a target directory
+    async moveSelected() {
+        if (this.selectedItems.size === 0) return;
+        if (this.currentView === 'share') {
+            try { window.notify && window.notify.error('分享列表不支持移动'); } catch (e) { this.alertModal('分享列表不支持移动'); }
+            return;
+        }
+        if (this.currentPath && this.currentPath.startsWith('/.trash')) {
+            try { window.notify && window.notify.error('垃圾箱内请先恢复再移动'); } catch (e) { this.alertModal('垃圾箱内请先恢复再移动'); }
+            return;
+        }
+
+        const dest = await this.openMoveDialog();
+        if (!dest) return;
+
+        const selected = Array.from(this.selectedItems);
+        this.showLoading();
+        let successCount = 0;
+        const failed = [];
+        try {
+            for (const src of selected) {
+                if (!src) continue;
+                const name = src.substring(src.lastIndexOf('/') + 1);
+                if (!name) { failed.push(src + '（缺少名称）'); continue; }
+                // prevent moving a directory into itself or its descendant
+                if (src === dest || (dest.startsWith(src + '/'))) {
+                    failed.push(src + ' 无法移动到自身或子目录');
+                    continue;
+                }
+                const dst = dest === '/' ? '/' + name : dest + '/' + name;
+                const body = new URLSearchParams();
+                body.append('action', 'move');
+                body.append('src', src);
+                body.append('dst', dst);
+                const resp = await fetch(`${this.base}/api/file`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body.toString()
+                });
+                const data = await this.parseJson(resp);
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failed.push(`${src} -> ${dst}: ${data.message || '未知错误'}`);
+                }
+            }
+
+            if (successCount > 0) {
+                try { window.notify && window.notify.success(`移动成功（${successCount} 项）`); } catch (e) {}
+                await this.loadDirectory(dest);
+            } else {
+                await this.alertModal('移动失败: ' + (failed[0] || '未知原因'));
+            }
+
+            if (failed.length > 0 && successCount > 0) {
+                await this.alertModal('以下项移动失败:\n' + failed.join('\n'));
+            }
+        } catch (err) {
+            this.showError('批量移动失败: ' + err.message);
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    // Modal tree picker for selecting a destination directory
+    async openMoveDialog() {
+        const wrapper = document.createElement('div');
+        wrapper.style.minWidth = '620px';
+        wrapper.style.maxWidth = '900px';
+        wrapper.style.display = 'flex';
+        wrapper.style.flexDirection = 'column';
+        wrapper.style.gap = '10px';
+        const treeEl = document.createElement('div');
+        treeEl.className = 'move-tree';
+        wrapper.appendChild(treeEl);
+        const selectedLabel = document.createElement('div');
+        selectedLabel.className = 'move-selected-path';
+        wrapper.appendChild(selectedLabel);
+
+        const state = { selected: this.currentPath || '/' };
+        const cache = new Map();
+
+        const normalizeDirItems = (items) => {
+            return (items || []).map(it => {
+                const path = it.path || it.fullPath || it.name || '';
+                const name = it.name || (path ? path.substring(path.lastIndexOf('/') + 1) : path);
+                const isDirectory = !!it.isDirectory || it.type === 'directory' || it.isDir === true;
+                return { path, name, isDirectory };
+            }).filter(it => it.isDirectory);
+        };
+
+        const fetchDirs = async (path) => {
+            if (cache.has(path)) return cache.get(path);
+            const url = `${this.base}/api/directory?action=list&path=${encodeURIComponent(path)}`;
+            const resp = await fetch(url);
+            const data = await this.parseJson(resp);
+            if (!data.success) throw new Error(data.message || '加载目录失败');
+            const dirs = normalizeDirItems(data.items || data.list || data.results || []);
+            cache.set(path, dirs);
+            return dirs;
+        };
+
+        const updateSelectionUI = () => {
+            selectedLabel.textContent = '已选择：' + state.selected;
+            treeEl.querySelectorAll('.move-row').forEach(r => {
+                r.classList.toggle('selected', r.getAttribute('data-path') === state.selected);
+            });
+        };
+
+        const renderChildren = async (path, container, depth) => {
+            container.innerHTML = '';
+            try {
+                const dirs = await fetchDirs(path);
+                dirs.forEach(d => {
+                    const pair = renderRow(d, depth);
+                    container.appendChild(pair.row);
+                    container.appendChild(pair.childrenWrap);
+                });
+                updateSelectionUI();
+            } catch (e) {
+                const err = document.createElement('div');
+                err.textContent = '加载失败: ' + e.message;
+                err.style.color = '#b00020';
+                err.style.padding = '6px 8px';
+                container.appendChild(err);
+                updateSelectionUI();
+            }
+        };
+
+        const renderRow = (dir, depth) => {
+            const row = document.createElement('div');
+            row.className = 'move-row';
+            row.setAttribute('data-path', dir.path);
+            row.style.paddingLeft = `${depth * 14 + 8}px`;
+
+            const toggle = document.createElement('span');
+            toggle.className = 'move-toggle';
+            toggle.textContent = '▸';
+
+            const icon = document.createElement('span');
+            icon.className = 'move-folder-icon';
+            icon.textContent = '📁';
+
+            const name = document.createElement('span');
+            name.className = 'name';
+            name.textContent = dir.path === '/' ? '全部文件' : (dir.name || dir.path);
+
+            const childrenWrap = document.createElement('div');
+            childrenWrap.className = 'move-children';
+            childrenWrap.style.display = 'none';
+
+            const toggleExpand = async () => {
+                if (childrenWrap.style.display === 'none') {
+                    childrenWrap.style.display = 'block';
+                    toggle.textContent = '▾';
+                    await renderChildren(dir.path, childrenWrap, depth + 1);
+                } else {
+                    childrenWrap.style.display = 'none';
+                    toggle.textContent = '▸';
+                }
+            };
+
+            toggle.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                await toggleExpand();
+            });
+
+            row.addEventListener('click', () => {
+                state.selected = dir.path;
+                updateSelectionUI();
+            });
+
+            row.appendChild(toggle);
+            row.appendChild(icon);
+            row.appendChild(name);
+            return { row, childrenWrap };
+        };
+
+        // root row
+        const rootPair = renderRow({ path: '/', name: '全部文件', isDirectory: true }, 0);
+        treeEl.appendChild(rootPair.row);
+        treeEl.appendChild(rootPair.childrenWrap);
+
+        // pre-expand root
+        const rootChildren = rootPair.childrenWrap;
+        if (rootChildren) {
+            rootChildren.style.display = 'block';
+            rootPair.row.querySelector('.move-toggle').textContent = '▾';
+            renderChildren('/', rootChildren, 1).then(updateSelectionUI);
+        }
+
+        updateSelectionUI();
+
+        const choice = await this.openModal('移动到...', wrapper, [
+            { id: 'cancel', label: '取消', value: null },
+            { id: 'ok', label: '确认', value: 'ok', className: 'btn-primary' }
+        ]);
+        if (choice !== 'ok') return null;
+        return state.selected || '/';
     }
     // Simple search: try directory search endpoint then fallback to client-side (not implemented)
     async performSearch() {
@@ -1831,6 +2058,8 @@ class CloudDrive {
         // update toolbar state
         const deleteBtn = document.getElementById('deleteBtn');
         if (deleteBtn) deleteBtn.disabled = (this.selectedItems.size === 0);
+        const moveBtn = document.getElementById('moveBtn');
+        if (moveBtn) moveBtn.disabled = (this.selectedItems.size === 0);
     }
 
     // Called when any single checkbox changes
@@ -1843,6 +2072,8 @@ class CloudDrive {
         });
         const deleteBtn = document.getElementById('deleteBtn');
         if (deleteBtn) deleteBtn.disabled = (this.selectedItems.size === 0);
+        const moveBtn = document.getElementById('moveBtn');
+        if (moveBtn) moveBtn.disabled = (this.selectedItems.size === 0);
         const selectAllEl = document.getElementById('selectAll');
         const all = document.querySelectorAll('.item-checkbox');
         if (selectAllEl) selectAllEl.checked = (all.length > 0 && checked.length === all.length);

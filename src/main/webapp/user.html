@@ -36,6 +36,7 @@
     </header>
 
     <main style="padding:18px 12px;">
+      <button id="backHomeBtn" class="btn" style="margin-left:12px;">返回主页面</button>
       <div class="user-center">
         <div class="uc-header">
           <div class="uc-avatar" id="avatarWrap">
@@ -53,30 +54,30 @@
           <div class="form-row">
             <label>修改头像</label>
             <div class="avatar-upload">
-              <input type="file" id="avatarFile" accept="image/*">
-              <button class="btn" id="removeAvatarBtn">移除头像</button>
+              <input type="file" id="avatarFile" accept="image/*" disabled>
+              <button class="btn" id="removeAvatarBtn" disabled>移除头像</button>
               <div class="hint">支持 JPG/PNG/GIF，建议 256x256</div>
             </div>
           </div>
 
           <div class="form-row">
             <label>用户名</label>
-            <input type="text" id="usernameInput" placeholder="输入用户名">
+            <input type="text" id="usernameInput" placeholder="输入用户名" disabled>
           </div>
 
           <div class="form-row">
-            <label>当前密码</label>
-            <input type="password" id="currentPwd" placeholder="输入当前密码（修改密码时需要）">
+            <label>邮箱</label>
+            <input type="text" id="emailInput" placeholder="填写邮箱便于找回/通知" disabled>
           </div>
 
           <div class="form-row">
-            <label>新密码</label>
-            <input type="password" id="newPwd" placeholder="留空表示不修改">
+            <label>手机号</label>
+            <input type="text" id="phoneInput" placeholder="填写手机号便于联系/验证" disabled>
           </div>
 
           <div class="form-row">
-            <label>确认新密码</label>
-            <input type="password" id="confirmPwd" placeholder="再次输入新密码">
+            <label>密码</label>
+            <button class="btn" id="changePwdBtn" disabled>修改密码</button>
           </div>
 
           <div class="actions">
@@ -87,8 +88,9 @@
               </div>
             </div>
             <div>
-              <button class="btn" id="cancelBtn">取消</button>
-              <button class="btn btn-primary" id="saveBtn">保存</button>
+              <button class="btn" id="cancelBtn" style="display:none;">取消</button>
+              <button class="btn" id="editBtn">修改</button>
+              <button class="btn btn-primary" id="saveBtn" style="display:none;" disabled>保存</button>
             </div>
           </div>
         </div>
@@ -100,5 +102,28 @@
   <!-- notify scripts -->
   <script src="notify/script.js"></script>
   <script src="js/notify.js"></script>
+
+  <!-- 密码修改弹窗 -->
+  <div id="pwdModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:20px 24px; border-radius:8px; width:360px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0;">修改密码</h3>
+      <div class="form-row" style="flex-direction:column; align-items:flex-start; gap:6px;">
+        <label>当前密码</label>
+        <input type="password" id="pwdCurrent" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:6px;">
+      </div>
+      <div class="form-row" style="flex-direction:column; align-items:flex-start; gap:6px;">
+        <label>新密码</label>
+        <input type="password" id="pwdNew" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:6px;">
+      </div>
+      <div class="form-row" style="flex-direction:column; align-items:flex-start; gap:6px;">
+        <label>确认新密码</label>
+        <input type="password" id="pwdConfirm" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:6px;">
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+        <button class="btn" id="pwdCancel">取消</button>
+        <button class="btn btn-primary" id="pwdSave">保存</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

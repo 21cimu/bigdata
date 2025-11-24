@@ -1,7 +1,8 @@
-// user center page script
+// User center page logic: read-only by default, editable after clicking "修改"
 (function(){
   const ctx = window.location.pathname.replace(/\/[^/]*$/, '') || '';
   const base = window.location.origin + ctx;
+  const state = { editing: false, user: null };
 
   function el(id){ return document.getElementById(id); }
 
@@ -11,41 +12,44 @@
   }
 
   function bindEvents(){
-    const avatarFile = el('avatarFile');
-    if (avatarFile) avatarFile.addEventListener('change', onAvatarChange);
+    const avatarFile = el('avatarFile'); if (avatarFile) avatarFile.addEventListener('change', onAvatarChange);
     const removeBtn = el('removeAvatarBtn'); if (removeBtn) removeBtn.addEventListener('click', removeAvatar);
     const saveBtn = el('saveBtn'); if (saveBtn) saveBtn.addEventListener('click', onSave);
-    const cancelBtn = el('cancelBtn'); if (cancelBtn) cancelBtn.addEventListener('click', () => { window.history.back(); });
+    const cancelBtn = el('cancelBtn'); if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
     const logoutBtn = el('logoutBtn'); if (logoutBtn) logoutBtn.addEventListener('click', onLogout);
+    const changePwdBtn = el('changePwdBtn'); if (changePwdBtn) changePwdBtn.addEventListener('click', openPwdModal);
+    const pwdCancel = el('pwdCancel'); if (pwdCancel) pwdCancel.addEventListener('click', closePwdModal);
+    const pwdSave = el('pwdSave'); if (pwdSave) pwdSave.addEventListener('click', onChangePassword);
+    const editBtn = el('editBtn'); if (editBtn) editBtn.addEventListener('click', () => setEditMode(true));
+    const backHomeBtn = el('backHomeBtn'); if (backHomeBtn) backHomeBtn.addEventListener('click', () => { window.location.href = base + '/index.html'; });
   }
 
   async function loadUser(){
     try{
-      try { window.__appTrace && window.__appTrace('user.loadUser: start'); } catch(e){}
       const resp = await fetch(base + '/api/user');
-      try { window.__appTrace && window.__appTrace('user.loadUser: fetched /api/user status=' + resp.status); } catch(e){}
       const data = await resp.json();
       if (!data || !data.success) {
-        // not logged in or error -> redirect to login
         window.location.href = base + '/login.html';
         return;
       }
       const user = data.user || {};
-      el('avatarImg').src = user.avatar || el('avatarImg').src;
-      el('displayName').textContent = user.username || '用户';
-      el('userId').textContent = 'ID: ' + (user.id || '-');
-      el('usernameInput').value = user.username || '';
-      // store id
-      el('usernameInput').setAttribute('data-user-id', user.id || '');
-      try { window.__appTrace && window.__appTrace('user.loadUser: render done'); } catch(e){}
+      state.user = user;
+      if (el('avatarImg')) el('avatarImg').src = user.avatar || el('avatarImg').src;
+      if (el('displayName')) el('displayName').textContent = user.username || '用户';
+      if (el('userId')) el('userId').textContent = 'ID: ' + (user.id || '-');
+      if (el('usernameInput')) el('usernameInput').value = user.username || '';
+      if (el('emailInput')) el('emailInput').value = user.email || '';
+      if (el('phoneInput')) el('phoneInput').value = user.phone || '';
+      if (el('usernameInput')) el('usernameInput').setAttribute('data-user-id', user.id || '');
+      setEditMode(false);
     }catch(e){
       console.debug('loadUser error', e);
-      // redirect to login as fallback
       window.location.href = base + '/login.html';
     }
   }
 
   function onAvatarChange(e){
+    if (!state.editing) return;
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     if (!f.type.startsWith('image/')) { try { window.notify && window.notify.error('请选择图片文件'); } catch (e) { alert('请选择图片文件'); } return; }
@@ -55,66 +59,112 @@
   }
 
   function removeAvatar(){
-    // set to default empty avatar (server should accept null to remove)
-    el('avatarImg').src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="%231976D2"/><circle cx="32" cy="22" r="12" fill="%23ffffff"/><rect x="8" y="40" width="48" height="12" rx="6" fill="%23ffffff"/></svg>';
-    el('avatarImg').removeAttribute('data-durl');
-    // also clear file input
+    if (!state.editing) return;
+    if (el('avatarImg')) {
+      el('avatarImg').src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="%231976D2"/><circle cx="32" cy="22" r="12" fill="%23ffffff"/><rect x="8" y="40" width="48" height="12" rx="6" fill="%23ffffff"/></svg>';
+      el('avatarImg').removeAttribute('data-durl');
+    }
     const f = el('avatarFile'); if (f) f.value = '';
   }
 
   async function onSave(){
-    const username = el('usernameInput').value.trim();
-    const currentPwd = el('currentPwd').value || '';
-    const newPwd = el('newPwd').value || '';
-    const confirmPwd = el('confirmPwd').value || '';
-
+    if (!state.editing) { setEditMode(true); return; }
+    const username = (el('usernameInput').value || '').trim();
+    const email = (el('emailInput').value || '').trim();
+    const phone = (el('phoneInput').value || '').trim();
     if (!username) { try { window.notify && window.notify.error('用户名不能为空'); } catch (e) { alert('用户名不能为空'); } return; }
-    if (newPwd || confirmPwd) {
-      if (newPwd !== confirmPwd) { try { window.notify && window.notify.error('两次输入的新密码不一致'); } catch (e) { alert('两次输入的新密码不一致'); } return; }
-      if (!currentPwd) { try { window.notify && window.notify.error('修改密码需要输入当前密码'); } catch (e) { alert('修改密码需要输入当前密码'); } return; }
-      if (newPwd.length < 6) { try { window.notify && window.notify.error('新密码长度至少为 6 字符'); } catch (e) { alert('新密码长度至少为 6 字符'); } return; }
-    }
 
-    // build payload
-    const payload = { username };
-    // avatar: prefer data-durl if user selected new image; if explicitly removed, send empty string
+    const payload = { username, email, phone };
     const avatarEl = el('avatarImg');
-    if (avatarEl.getAttribute('data-durl')) payload.avatar = avatarEl.getAttribute('data-durl');
-    else if (!avatarEl.src || avatarEl.src.indexOf('data:image') === -1) payload.avatar = avatarEl.src; // server may accept full URL
-    else {
-      // if avatar is default svg data URI, treat as null (no avatar)
-      payload.avatar = null;
+    if (avatarEl) {
+      if (avatarEl.getAttribute('data-durl')) payload.avatar = avatarEl.getAttribute('data-durl');
+      else if (!avatarEl.src || avatarEl.src.indexOf('data:image') === -1) payload.avatar = avatarEl.src;
+      else payload.avatar = null;
     }
-
-    if (newPwd) payload.password = newPwd;
-    if (currentPwd && newPwd) payload.currentPassword = currentPwd;
 
     try{
       const resp = await fetch(base + '/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      try { window.__appTrace && window.__appTrace('user.onSave: POST /api/user sent'); } catch(e){}
       const data = await resp.json();
       if (data && data.success) {
-        // 使用 notify 替换 alert
         try { window.notify && window.notify.success('保存成功'); } catch (e) {}
-        // redirect back to app main page
         window.location.href = base + '/index.html';
       } else {
         try { window.notify && window.notify.error('保存失败: ' + (data && data.message ? data.message : '未知错误')); } catch (e) { alert('保存失败: ' + (data && data.message ? data.message : '未知错误')); }
       }
     }catch(e){
       console.debug('save error', e);
-      try { window.__appTrace && window.__appTrace('user.onSave: exception ' + (e && e.message)); } catch(e2){}
+      try { window.notify && window.notify.error('请求失败: ' + e.message); } catch (err) { alert('请求失败: ' + e.message); }
+    }
+  }
+
+  function openPwdModal(){
+    if (!state.editing) return;
+    const modal = el('pwdModal');
+    if (!modal) return;
+    el('pwdCurrent').value = '';
+    el('pwdNew').value = '';
+    el('pwdConfirm').value = '';
+    modal.style.display = 'flex';
+  }
+
+  function closePwdModal(){
+    const modal = el('pwdModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function onChangePassword(){
+    if (!state.editing) return;
+    const currentPwd = (el('pwdCurrent').value || '').trim();
+    const newPwd = (el('pwdNew').value || '').trim();
+    const confirmPwd = (el('pwdConfirm').value || '').trim();
+    if (!currentPwd || !newPwd || !confirmPwd) { try { window.notify && window.notify.error('请完整填写密码信息'); } catch (e) { alert('请完整填写密码信息'); } return; }
+    if (newPwd !== confirmPwd) { try { window.notify && window.notify.error('两次输入的新密码不一致'); } catch (e) { alert('两次输入的新密码不一致'); } return; }
+    if (newPwd.length < 6) { try { window.notify && window.notify.error('新密码长度至少为 6 位'); } catch (e) { alert('新密码长度至少为 6 位'); } return; }
+    try{
+      const payload = { password: newPwd, currentPassword: currentPwd };
+      const resp = await fetch(base + '/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await resp.json();
+      if (data && data.success) {
+        try { window.notify && window.notify.success('密码修改成功'); } catch (e) { alert('密码修改成功'); }
+        closePwdModal();
+      } else {
+        try { window.notify && window.notify.error('修改失败: ' + (data && data.message ? data.message : '未知错误')); } catch (e) { alert('修改失败: ' + (data && data.message ? data.message : '未知错误')); }
+      }
+    } catch (e) {
       try { window.notify && window.notify.error('请求失败: ' + e.message); } catch (err) { alert('请求失败: ' + e.message); }
     }
   }
 
   async function onLogout(){
-    try{
-      await fetch(base + '/api/auth?action=logout', { method: 'POST' });
-    }catch(e){}
-    // queue notify to show on login page
+    try{ await fetch(base + '/api/auth?action=logout', { method: 'POST' }); }catch(e){}
     try { localStorage.setItem('lastNotify', JSON.stringify({ type: 'info', message: '已登出' })); } catch (e) {}
     window.location.href = base + '/login.html';
+  }
+
+  function onCancel(){
+    resetFormFromState();
+    setEditMode(false);
+  }
+
+  function resetFormFromState(){
+    const user = state.user || {};
+    if (el('usernameInput')) el('usernameInput').value = user.username || '';
+    if (el('emailInput')) el('emailInput').value = user.email || '';
+    if (el('phoneInput')) el('phoneInput').value = user.phone || '';
+    if (el('avatarImg')) {
+      el('avatarImg').src = user.avatar || el('avatarImg').src;
+      el('avatarImg').removeAttribute('data-durl');
+    }
+    const f = el('avatarFile'); if (f) f.value = '';
+  }
+
+  function setEditMode(flag){
+    state.editing = !!flag;
+    const inputs = [el('usernameInput'), el('emailInput'), el('phoneInput'), el('avatarFile'), el('removeAvatarBtn'), el('changePwdBtn')];
+    inputs.forEach(i => { if (i) i.disabled = !state.editing; });
+    const saveBtn = el('saveBtn'); if (saveBtn) { saveBtn.disabled = !state.editing; saveBtn.style.display = state.editing ? '' : 'none'; }
+    const cancelBtn = el('cancelBtn'); if (cancelBtn) cancelBtn.style.display = state.editing ? '' : 'none';
+    const editBtn = el('editBtn'); if (editBtn) editBtn.style.display = state.editing ? 'none' : '';
   }
 
   document.addEventListener('DOMContentLoaded', init);

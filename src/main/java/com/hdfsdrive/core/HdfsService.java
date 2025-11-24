@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.Closeable;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +19,7 @@ import java.util.List;
  * Lightweight wrapper around Hadoop FileSystem to be used by a personal "HDFS Drive".
  * Provides upload, download, mkdirs, createFile, delete and search operations.
  */
-public class HdfsService {
+public class HdfsService implements Closeable {
     private final FileSystem fs;
 
     /**
@@ -50,6 +51,7 @@ public class HdfsService {
         }
     }
 
+    @Override
     public void close() throws IOException {
         if (fs != null) fs.close();
     }

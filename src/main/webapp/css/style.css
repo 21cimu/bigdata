@@ -146,6 +146,49 @@ body {
     color: #999;
 }
 
+/* Move dialog tree */
+.move-tree {
+    max-height: 65vh;
+    overflow: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #fafafa;
+    padding: 12px;
+}
+.move-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+.move-row:hover {
+    background: #eef3ff;
+}
+.move-row.selected {
+    background: #e3f2fd;
+    color: #0d47a1;
+    font-weight: 600;
+}
+.move-children {
+    margin-left: 18px;
+}
+.move-toggle {
+    width: 14px;
+    text-align: center;
+    color: #666;
+}
+.move-folder-icon {
+    color: #1e88e5;
+}
+.move-selected-path {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #555;
+}
+
 /* File List Styles */
 .file-list {
     padding: 20px 30px;

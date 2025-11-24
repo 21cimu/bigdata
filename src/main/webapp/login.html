@@ -19,7 +19,7 @@
       <svg width="28" height="28" viewBox="0 0 32 32" style="display:inline-block; vertical-align:middle;">
         <path fill="#2196F3" d="M25 10c-1.3 0-2.5.4-3.5 1.1-1.3-3.4-4.6-5.8-8.5-5.8-4.9 0-8.9 4-8.9 8.9 0 .5 0 1 .1 1.5C2 16.5 1 18.6 1 21c0 3.3 2.7 6 6 6h18c3.3 0 6-2.7 6-6s-2.7-6-6-6z"/>
       </svg>
-      UU云盘
+      拾光云盘
     </h1>
     <div class="container a-container is-hidden" id="a-container">
       <form class="form" id="a-form">
@@ -127,7 +127,8 @@
         try { if (status) { status.textContent = ''; status.style.color = ''; } } catch(e){}
         const u = document.getElementById('username').value.trim();
         const p = document.getElementById('password').value;
-        if (!u || !p) { showMsg('error', '用户名和密码不能为空'); return; }
+        if (!u) { showMsg('error', '请输入用户名'); return; }
+        if (!p) { showMsg('error', '请输入密码'); return; }
         try {
           const body = new URLSearchParams();
           body.append('action','login'); body.append('username', u); body.append('password', p); body.append('debug', '1');

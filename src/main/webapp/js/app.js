@@ -819,8 +819,6 @@ class CloudDrive {
                     console.error('updateBreadcrumb is not a function on this:', this);
                     // don't throw; show a helpful message in console and continue
                 }
-                // show small success notification for directory load
-                try { if (window.notify) window.notify.success('加载成功'); } catch (e) { /* ignore */ }
             } else {
                 // If backend returned success=false, try a debug fetch to obtain stack trace
                 this.showError(data.message);
@@ -887,6 +885,8 @@ class CloudDrive {
     async handleFileUpload(fileList) {
         if (!fileList || fileList.length === 0) return;
         this.showLoading();
+        let successCount = 0;
+        let failCount = 0;
         try {
             for (let i = 0; i < fileList.length; i++) {
                 const file = fileList[i];
@@ -897,15 +897,27 @@ class CloudDrive {
                 const url = `${this.base}/api/file?action=upload`;
                 const resp = await fetch(url, { method: 'POST', body: form });
                 const data = await this.parseJson(resp);
-                if (!data.success) {
+                if (data.success) {
+                    successCount++;
+                } else {
+                    failCount++;
                     // show error notify
-                    try { window.notify && window.notify.error('上传文件失败: ' + (data.message || '未知错误')); } catch (e) {}
+                    const msg = data.message ? `${data.message}` : '未知错误';
+                    try { window.notify && window.notify.error(`上传 ${file.name} 失败: ${msg}`); } catch (e) {}
                 }
             }
             // clear input
             const fileInput = document.getElementById('fileInput');
             if (fileInput) fileInput.value = '';
             await this.loadDirectory(this.currentPath);
+            if (successCount > 0) {
+                const summary = failCount > 0
+                    ? `上传完成：成功 ${successCount} 个，失败 ${failCount} 个`
+                    : `上传成功（${successCount} 个文件）`;
+                try { window.notify && window.notify.success(summary); } catch (e) {}
+            } else if (failCount > 0) {
+                try { window.notify && window.notify.error(`上传失败 ${failCount} 个文件`); } catch (e) {}
+            }
         } catch (err) {
             try { window.notify && window.notify.error('上传失败: ' + err.message); } catch (e) { this.showError('上传失败: ' + err.message); }
         } finally {
@@ -1025,15 +1037,17 @@ class CloudDrive {
         }
         // if user selected immediate delete for batch (days==='0'), confirm immediate permanent delete
         if (!inTrash && days === '0') {
-            const ok = await this.confirmModal(`确定要立即永久删除选中的 ${sel.length} 项吗？该操作不可恢复。`);
+            const ok = await this.confirmModal(`确定要立即永久删除选中的 ${sel.length} 项吗？该操作不可恢复！`);
             if (!ok) return;
         } else {
-            const ok = await this.confirmModal(inTrash ? `确定要永久删除选中的 ${sel.length} 项吗？` : `确定要将选中的 ${sel.length} 项移入垃圾箱吗？`);
+            const ok = await this.confirmModal(inTrash ? `确要永久删除选中的 ${sel.length} 项吗？` : `确要将选中的 ${sel.length} 项移入回收站吗？`);
             if (!ok) return;
         }
         this.showLoading();
         try {
             // perform sequential deletes to get nicer error messages
+            let successCount = 0;
+            let failCount = 0;
             for (let p of sel) {
                 let permanent = inTrash ? 'true' : 'false';
                 if (!inTrash && days === '0') permanent = 'true';
@@ -1042,17 +1056,25 @@ class CloudDrive {
                 const resp = await fetch(url, { method: 'DELETE' });
                 const data = await this.parseJson(resp);
                 if (!data.success) {
-                    await this.alertModal('部分删除失败: ' + (data.message || p));
+                    failCount++;
+                    await this.alertModal('批量删除失败: ' + (data.message || p));
+                } else {
+                    successCount++;
                 }
             }
             await this.loadDirectory(this.currentPath);
+            if (successCount > 0) {
+                const msg = failCount > 0 ? `删除完成：成功 ${successCount} 项，失败 ${failCount} 项` : `删除成功（${successCount} 项）`;
+                try { window.notify && window.notify.success(msg); } catch (e) {}
+            } else if (failCount > 0) {
+                try { window.notify && window.notify.error(`删除失败 ${failCount} 项`); } catch (e) {}
+            }
         } catch (err) {
             try { window.notify && window.notify.error('批量删除失败: ' + err.message); } catch (e) { this.showError('批量删除失败: ' + err.message); }
         } finally {
             this.hideLoading();
         }
     }
-
     // Simple search: try directory search endpoint then fallback to client-side (not implemented)
     async performSearch() {
         const qEl = document.getElementById('searchInput');
@@ -1690,7 +1712,7 @@ class CloudDrive {
     async restoreSelected() {
         const checkboxes = document.querySelectorAll('.item-checkbox:checked');
         if (checkboxes.length === 0) return;
-        const ok = await this.confirmModal(`确定要恢复选中的 ${checkboxes.length} 项吗?`);
+        const ok = await this.confirmModal(`确认要恢复选中的 ${checkboxes.length} 项吗？`);
         if (!ok) return;
 
         const paths = Array.from(checkboxes).map(cb => cb.getAttribute('data-path'));
@@ -1708,15 +1730,19 @@ class CloudDrive {
                 // optionally show summary of results
                 const results = data.results || {};
                 const failed = Object.keys(results).filter(p => !results[p]);
+                const successCount = paths.length - failed.length;
                 if (failed.length > 0) {
-                    await this.alertModal('以下项恢复失败:\n' + failed.join('\n'));
+                    await this.alertModal('\u6279\u91cf\u6062\u590d\u5931\u8d25:\n' + failed.join('\n'));
+                    try { window.notify && window.notify.error(`\u6062\u590d\u5b8c\u6210\uff1a\u6210\u529f ${successCount} \u9879\uff0c\u5931\u8d25 ${failed.length} \u9879`); } catch (e) {}
+                } else {
+                    try { window.notify && window.notify.success(`\u6062\u590d\u6210\u529f\uff08${successCount} \u9879\uff09`); } catch (e) {}
                 }
                 await this.loadDirectory(this.currentPath);
             } else {
-                try { window.notify && window.notify.error(data.message || '批量恢复失败'); } catch (e) { this.showError(data.message || '批量恢复失败'); }
+                try { window.notify && window.notify.error(data.message || '\u6279\u91cf\u6062\u590d\u5931\u8d25'); } catch (e) { this.showError(data.message || '\u6279\u91cf\u6062\u590d\u5931\u8d25'); }
             }
         } catch (err) {
-            this.showError('批量恢复失败: ' + err.message);
+            this.showError('\u6279\u91cf\u6062\u590d\u5931\u8d25: ' + err.message);
         } finally {
             this.hideLoading();
         }

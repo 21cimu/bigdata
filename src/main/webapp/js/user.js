@@ -98,7 +98,6 @@
   }
 
   function openPwdModal(){
-    if (!state.editing) return;
     const modal = el('pwdModal');
     if (!modal) return;
     el('pwdCurrent').value = '';
@@ -113,22 +112,30 @@
   }
 
   async function onChangePassword(){
-    if (!state.editing) return;
     const currentPwd = (el('pwdCurrent').value || '').trim();
     const newPwd = (el('pwdNew').value || '').trim();
     const confirmPwd = (el('pwdConfirm').value || '').trim();
     if (!currentPwd || !newPwd || !confirmPwd) { try { window.notify && window.notify.error('请完整填写密码信息'); } catch (e) { alert('请完整填写密码信息'); } return; }
     if (newPwd !== confirmPwd) { try { window.notify && window.notify.error('两次输入的新密码不一致'); } catch (e) { alert('两次输入的新密码不一致'); } return; }
-    if (newPwd.length < 6) { try { window.notify && window.notify.error('新密码长度至少为 6 位'); } catch (e) { alert('新密码长度至少为 6 位'); } return; }
     try{
       const payload = { password: newPwd, currentPassword: currentPwd };
       const resp = await fetch(base + '/api/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await resp.json();
+      let data;
+      try { data = await resp.json(); } catch (e) { data = null; }
+      if (!resp.ok && (!data || data.success === undefined)) {
+        const txt = data && data.message ? data.message : (resp.status + ' ' + resp.statusText);
+        try { window.notify && window.notify.error('修改失败: ' + txt); } catch (e) { alert('修改失败: ' + txt); }
+        return;
+      }
       if (data && data.success) {
         try { window.notify && window.notify.success('密码修改成功'); } catch (e) { alert('密码修改成功'); }
         closePwdModal();
+        try { await fetch(base + '/api/auth?action=logout', { method: 'POST' }); } catch (e) {}
+        try { localStorage.setItem('lastNotify', JSON.stringify({ type: 'success', message: '密码已更新，请重新登录' })); } catch (e) {}
+        window.location.href = base + '/login.html';
       } else {
-        try { window.notify && window.notify.error('修改失败: ' + (data && data.message ? data.message : '未知错误')); } catch (e) { alert('修改失败: ' + (data && data.message ? data.message : '未知错误')); }
+        const msg = data && data.message ? data.message : '未知错误';
+        try { window.notify && window.notify.error('修改失败: ' + msg); } catch (e) { alert('修改失败: ' + msg); }
       }
     } catch (e) {
       try { window.notify && window.notify.error('请求失败: ' + e.message); } catch (err) { alert('请求失败: ' + e.message); }

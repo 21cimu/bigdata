@@ -92,7 +92,10 @@ public class UserServlet extends HttpServlet {
 
             if (email == null || email.trim().isEmpty()) email = existingUser.getEmail();
             if (phone == null || phone.trim().isEmpty()) phone = existingUser.getPhone();
-
+            // if avatar not provided, keep existing avatar
+            if (avatar == null || avatar.trim().isEmpty()) {
+                avatar = existingUser.getAvatar();
+            }
             String ctxPath = req.getContextPath() == null ? "" : req.getContextPath();
             String savedAvatarPath = null;
             String previousAvatar = existingUser.getAvatar();

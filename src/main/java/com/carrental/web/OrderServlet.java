@@ -248,10 +248,22 @@ public class OrderServlet extends HttpServlet {
     private Map<String, Object> createOrder(Map<String, Object> data) throws Exception {
         String orderNo = "ORD" + System.currentTimeMillis();
         
-        // Parse dates
+        // Parse and validate dates
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
-        LocalDateTime pickupTime = LocalDateTime.parse((String) data.get("pickupTime"), formatter);
-        LocalDateTime returnTime = LocalDateTime.parse((String) data.get("returnTime"), formatter);
+        LocalDateTime pickupTime;
+        LocalDateTime returnTime;
+        
+        try {
+            pickupTime = LocalDateTime.parse((String) data.get("pickupTime"), formatter);
+            returnTime = LocalDateTime.parse((String) data.get("returnTime"), formatter);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid date format. Use ISO-8601 format (e.g., 2024-01-01T10:00:00)");
+        }
+        
+        // Validate return time is after pickup time
+        if (returnTime.isBefore(pickupTime) || returnTime.isEqual(pickupTime)) {
+            throw new IllegalArgumentException("Return time must be after pickup time");
+        }
         
         // Calculate rental days
         long days = java.time.Duration.between(pickupTime, returnTime).toDays();
@@ -283,9 +295,22 @@ public class OrderServlet extends HttpServlet {
             ps.setString(1, orderNo);
             ps.setLong(2, ((Number) data.get("userId")).longValue());
             ps.setLong(3, vehicleId);
-            ps.setObject(4, data.get("storeId"));
-            ps.setObject(5, data.get("pickupStoreId"));
-            ps.setObject(6, data.get("returnStoreId"));
+            // Use setLong with proper null handling instead of setObject
+            if (data.get("storeId") != null) {
+                ps.setLong(4, ((Number) data.get("storeId")).longValue());
+            } else {
+                ps.setNull(4, java.sql.Types.BIGINT);
+            }
+            if (data.get("pickupStoreId") != null) {
+                ps.setLong(5, ((Number) data.get("pickupStoreId")).longValue());
+            } else {
+                ps.setNull(5, java.sql.Types.BIGINT);
+            }
+            if (data.get("returnStoreId") != null) {
+                ps.setLong(6, ((Number) data.get("returnStoreId")).longValue());
+            } else {
+                ps.setNull(6, java.sql.Types.BIGINT);
+            }
             ps.setTimestamp(7, Timestamp.valueOf(pickupTime));
             ps.setTimestamp(8, Timestamp.valueOf(returnTime));
             ps.setInt(9, (int) days);

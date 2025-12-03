@@ -89,6 +89,11 @@ public class VehicleServlet extends HttpServlet {
             @SuppressWarnings("unchecked")
             Map<String, Object> vehicleData = mapper.readValue(sb.toString(), Map.class);
             
+            // Basic validation
+            if (vehicleData.get("vehicleCode") == null || vehicleData.get("brand") == null) {
+                throw new IllegalArgumentException("Required fields missing: vehicleCode, brand");
+            }
+            
             // Create vehicle
             long id = createVehicle(vehicleData);
             
@@ -133,10 +138,18 @@ public class VehicleServlet extends HttpServlet {
             
             int paramIndex = 1;
             if (category != null && !category.isEmpty()) {
-                ps.setLong(paramIndex++, Long.parseLong(category));
+                try {
+                    ps.setLong(paramIndex++, Long.parseLong(category));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid category ID: " + category);
+                }
             }
             if (store != null && !store.isEmpty()) {
-                ps.setLong(paramIndex++, Long.parseLong(store));
+                try {
+                    ps.setLong(paramIndex++, Long.parseLong(store));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid store ID: " + store);
+                }
             }
             if (status != null && !status.isEmpty()) {
                 ps.setString(paramIndex++, status);
@@ -223,17 +236,50 @@ public class VehicleServlet extends HttpServlet {
             ps.setString(1, (String) data.get("vehicleCode"));
             ps.setString(2, (String) data.get("vin"));
             ps.setString(3, (String) data.get("licensePlate"));
-            ps.setObject(4, data.get("categoryId"));
-            ps.setObject(5, data.get("storeId"));
+            
+            // Use specific setters with null handling instead of setObject
+            if (data.get("categoryId") != null) {
+                ps.setLong(4, ((Number) data.get("categoryId")).longValue());
+            } else {
+                ps.setNull(4, java.sql.Types.BIGINT);
+            }
+            if (data.get("storeId") != null) {
+                ps.setLong(5, ((Number) data.get("storeId")).longValue());
+            } else {
+                ps.setNull(5, java.sql.Types.BIGINT);
+            }
+            
             ps.setString(6, (String) data.get("brand"));
             ps.setString(7, (String) data.get("model"));
-            ps.setObject(8, data.get("year"));
+            
+            if (data.get("year") != null) {
+                ps.setInt(8, ((Number) data.get("year")).intValue());
+            } else {
+                ps.setNull(8, java.sql.Types.INTEGER);
+            }
+            
             ps.setString(9, (String) data.get("color"));
-            ps.setObject(10, data.get("seats"));
+            
+            if (data.get("seats") != null) {
+                ps.setInt(10, ((Number) data.get("seats")).intValue());
+            } else {
+                ps.setNull(10, java.sql.Types.INTEGER);
+            }
+            
             ps.setString(11, (String) data.get("transmission"));
             ps.setString(12, (String) data.get("fuelType"));
-            ps.setObject(13, data.get("dailyPrice"));
-            ps.setObject(14, data.get("deposit"));
+            
+            if (data.get("dailyPrice") != null) {
+                ps.setBigDecimal(13, new java.math.BigDecimal(data.get("dailyPrice").toString()));
+            } else {
+                ps.setNull(13, java.sql.Types.DECIMAL);
+            }
+            if (data.get("deposit") != null) {
+                ps.setBigDecimal(14, new java.math.BigDecimal(data.get("deposit").toString()));
+            } else {
+                ps.setNull(14, java.sql.Types.DECIMAL);
+            }
+            
             ps.setString(15, (String) data.get("description"));
             ps.setString(16, (String) data.get("images"));
             ps.setString(17, (String) data.get("features"));

@@ -11,9 +11,16 @@ import java.sql.Statement;
  * Database schema initializer - reads and executes schema.sql
  */
 public class DatabaseInitializer {
-    private static final String JDBC_URL = "jdbc:mysql://localhost:3306/bigdata?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowMultiQueries=true";
-    private static final String JDBC_USER = "root";
-    private static final String JDBC_PASS = "123456";
+    // Database configuration - use environment variables in production
+    private static final String JDBC_URL = System.getenv("DB_URL") != null 
+        ? System.getenv("DB_URL")
+        : "jdbc:mysql://localhost:3306/bigdata?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowMultiQueries=true";
+    private static final String JDBC_USER = System.getenv("DB_USER") != null 
+        ? System.getenv("DB_USER")
+        : "root";
+    private static final String JDBC_PASS = System.getenv("DB_PASSWORD") != null 
+        ? System.getenv("DB_PASSWORD")
+        : "123456"; // Default for development only - CHANGE IN PRODUCTION
     
     static {
         try {

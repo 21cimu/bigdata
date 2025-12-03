@@ -269,13 +269,25 @@ public class VehicleServlet extends HttpServlet {
             ps.setString(11, (String) data.get("transmission"));
             ps.setString(12, (String) data.get("fuelType"));
             
-            if (data.get("dailyPrice") != null) {
-                ps.setBigDecimal(13, new java.math.BigDecimal(data.get("dailyPrice").toString()));
+            // Handle BigDecimal fields with proper null checking
+            Object dailyPriceObj = data.get("dailyPrice");
+            if (dailyPriceObj != null && !dailyPriceObj.toString().trim().isEmpty()) {
+                try {
+                    ps.setBigDecimal(13, new java.math.BigDecimal(dailyPriceObj.toString()));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid daily price format: " + dailyPriceObj);
+                }
             } else {
                 ps.setNull(13, java.sql.Types.DECIMAL);
             }
-            if (data.get("deposit") != null) {
-                ps.setBigDecimal(14, new java.math.BigDecimal(data.get("deposit").toString()));
+            
+            Object depositObj = data.get("deposit");
+            if (depositObj != null && !depositObj.toString().trim().isEmpty()) {
+                try {
+                    ps.setBigDecimal(14, new java.math.BigDecimal(depositObj.toString()));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid deposit format: " + depositObj);
+                }
             } else {
                 ps.setNull(14, java.sql.Types.DECIMAL);
             }

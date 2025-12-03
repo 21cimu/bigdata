@@ -17,11 +17,7 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Order API Servlet - 订单API
@@ -30,6 +26,7 @@ import java.util.UUID;
 @WebServlet(name = "OrderServlet", urlPatterns = {"/api/order", "/api/order/*"})
 public class OrderServlet extends HttpServlet {
     private final ObjectMapper mapper = new ObjectMapper();
+    private static final int MIN_RENTAL_DAYS = 1; // Minimum rental period in days
     
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -246,7 +243,8 @@ public class OrderServlet extends HttpServlet {
     }
     
     private Map<String, Object> createOrder(Map<String, Object> data) throws Exception {
-        String orderNo = "ORD" + System.currentTimeMillis();
+        // Generate unique order number using UUID to ensure uniqueness under high concurrency
+        String orderNo = "ORD" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
         
         // Parse and validate dates
         DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
@@ -267,7 +265,7 @@ public class OrderServlet extends HttpServlet {
         
         // Calculate rental days
         long days = java.time.Duration.between(pickupTime, returnTime).toDays();
-        if (days == 0) days = 1;
+        if (days < MIN_RENTAL_DAYS) days = MIN_RENTAL_DAYS;
         
         // Get vehicle price
         Long vehicleId = ((Number) data.get("vehicleId")).longValue();
